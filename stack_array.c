@@ -59,7 +59,7 @@ Stack CreateStack(int max_capacity)
 	s->max_capacity = max_capacity;
 	s->top_of_stack = -1;
 
-	s->array = (*int)malloc(sizeof(int)*max_capacity);
+	s->array = malloc(sizeof(int)*max_capacity);
 
 	return s;
 }
@@ -80,7 +80,6 @@ void Push(int x, Stack s)//push x in Stack s
 	{
 		s->top_of_stack++;
 		s->array[s->top_of_stack] = x;
-		printf("%d inserted\n", x);
 	}
 
 }
@@ -176,6 +175,6 @@ bool IsEmpty(Stack s)
 
 void Top(Stack s)
 {
-	printf("%d\t", s->array[s->top_of_stack]);
+	printf("%d  ", s->array[s->top_of_stack]);
 }
 
