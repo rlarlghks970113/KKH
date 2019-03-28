@@ -9,7 +9,7 @@ struct stack
 {
 	int max_capacity;
 	int top_of_stack;
-	char *array;
+	int *array;
 };
 
 Stack CreateStack(int max_capacity);
@@ -38,9 +38,10 @@ int main(int argc, char *argv[])
 
 	for (i = 0; i < strlen(input_str) && input_str[i] != '#'; i++)
 	{
-		Push(input_str[i], stack);
+		int number = (int)input_str[i]-'0';
+		Push(number, stack);
 	}
-
+	
 	fclose(fi);
 	DeleteStack(stack);
 
@@ -71,7 +72,7 @@ void Push(int x, Stack s)//push x in Stack s
 {
 	if (IsFull(s))
 	{
-		printf("Stack is full.\n");
+		printf("Error : Stack is full.\n");
 	}
 	else
 	{
@@ -98,13 +99,13 @@ void PrintStack(Stack s)
 {
 	for (int i = 0; i <= s->top_of_stack; i++)
 	{
-		printf("%d\t", s->array[i]);
+		printf("%c\t", s->array[i]);
 	}
 	printf("\n");
 }
 
 void Pop(Stack s)
 {
-	s->array[s->top_of_stack--] = NULL;
+	s->top_of_stack--;
 }
 
