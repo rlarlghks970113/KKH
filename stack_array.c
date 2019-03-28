@@ -34,14 +34,16 @@ int main(int argc, char *argv[])
 	fgets(input_str, 101, fi);
 	max = 10;
 	stack = CreateStack(max);
-	//p4_1 main_code
+	//p4_2 main_code
+	
+	printf("Top numbers :");
 
 	for (i = 0; i < strlen(input_str) && input_str[i] != '#'; i++)
 	{
-		int number = (int)input_str[i]-'0';
-		Push(number, stack);
+		result = Postfix(stack, input_str[i]);
 	}
 	
+	printf("\nevaluation result : %d\n", result);
 	fclose(fi);
 	DeleteStack(stack);
 
@@ -107,5 +109,32 @@ void PrintStack(Stack s)
 void Pop(Stack s)
 {
 	s->top_of_stack--;
+}
+
+int Postfix(Stack s, char input_char)
+{
+	int a, b;
+	int result;
+	switch(input_char)
+	{
+	case '+':
+		break;
+	case '-':
+		break;
+	case '*':
+		break;
+	case '/':
+		break;
+	case '%':
+		break;
+	default:
+		break;
+	}
+	return result;
+}
+
+bool IsEmpty(Stack s)
+{
+	
 }
 
