@@ -15,7 +15,7 @@ struct stack
 Stack CreateStack(int max_capacity);
 void Push(int x, Stack s);
 void Pop(Stack s);
-//int Top(Stack s);
+void Top(Stack s);
 void DeleteStack(Stack s);
 bool IsEmpty(Stack s);
 bool IsFull(Stack s);
@@ -59,7 +59,7 @@ Stack CreateStack(int max_capacity)
 	s->max_capacity = max_capacity;
 	s->top_of_stack = -1;
 
-	s->array = malloc(sizeof(char)*max_capacity);
+	s->array = (*int)malloc(sizeof(int)*max_capacity);
 
 	return s;
 }
@@ -108,26 +108,62 @@ void PrintStack(Stack s)
 
 void Pop(Stack s)
 {
-	s->top_of_stack--;
+	if (IsEmpty(s))
+	{
+		printf("Error : Stack is empty.\n");
+	}
+	else
+	{
+		s->top_of_stack--;
+	}
 }
 
 int Postfix(Stack s, char input_char)
 {
 	int a, b;
 	int result;
+	int input_num;
 	switch(input_char)
 	{
 	case '+':
+		result = s->array[(s->top_of_stack)-1] + s->array[(s->top_of_stack)];
+		Pop(s);
+		Pop(s);
+		Push(result, s);
+		Top(s);
 		break;
 	case '-':
+		result = s->array[(s->top_of_stack)-1] - s->array[(s->top_of_stack)];
+		Pop(s);
+		Pop(s);
+		Push(result, s);
+		Top(s);
 		break;
 	case '*':
+		result = s->array[(s->top_of_stack) - 1] * s->array[(s->top_of_stack)];
+		Pop(s);
+		Pop(s);
+		Push(result, s);
+		Top(s);
 		break;
 	case '/':
+		result = s->array[(s->top_of_stack) - 1] / s->array[(s->top_of_stack)];
+		Pop(s);
+		Pop(s);
+		Push(result, s);
+		Top(s);
 		break;
 	case '%':
+		result = s->array[(s->top_of_stack) - 1] % s->array[(s->top_of_stack)];
+		Pop(s);
+		Pop(s);
+		Push(result, s);
+		Top(s);
 		break;
 	default:
+		input_num = (int)input_char - '0';
+		Push(input_num, s);
+		Top(s);
 		break;
 	}
 	return result;
@@ -135,6 +171,11 @@ int Postfix(Stack s, char input_char)
 
 bool IsEmpty(Stack s)
 {
-	
+	return s->top_of_stack == -1;
+}
+
+void Top(Stack s)
+{
+	printf("%d\t", s->array[s->top_of_stack]);
 }
 
