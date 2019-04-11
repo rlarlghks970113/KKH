@@ -15,9 +15,7 @@ Tree insertNode(Tree root, int key);
 void findNode(Tree root, int key);
 void printInorder(Tree root);
 void deleteTree(Tree root);
-//HW6
-Tree deleteNode(Tree root, int key);
-Tree getMaxValueInTree(Tree parentNode, Tree root);
+
 
 void main(int argc, char *argv[])
 {
@@ -38,10 +36,10 @@ void main(int argc, char *argv[])
 			break;
 		case 'd':
 			fscanf(fi, "%d", &key);
-			deleteNode(root, key);
+			//deleteNode(root, key);
 			break;
 		case 'f':
-			fscnaf(fi, "%d", &key);
+			fscanf(fi, "%d", &key);
 			findNode(root, key);
 			break;
 		case 'p':
@@ -66,18 +64,22 @@ Tree insertNode(Tree root, int key)
 		root->value = key;
 		root->left = NULL;
 		root->right = NULL;
+		printf("insert %d\n", key);
 	}
+	else if (root->value == key)
+	{
+		printf("Insertion Error : There is already %d in the tree.\n", key);
+	}
+
 	if (key < root->value) { root->left = insertNode(root->left, key); }
 	else if (key > root->value) { root->right = insertNode(root->right, key);}
-	else { printf("Insertion Error : There is already %d in the tree.\n", key); }//if it has value in tree
-
 	
 	return root;
 }
 
 void findNode(Tree root, int key)
 {
-	if (root == NULL) { printf("%d is not in the tree.\n"); }
+	if (root == NULL) { printf("%d is not in the tree.\n", key); }
 
 	if (key < root->value) { findNode(root->left, key); }
 	else if (key > root->value) { findNode(root->right, key); }
