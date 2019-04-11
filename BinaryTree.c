@@ -16,6 +16,10 @@ void findNode(Tree root, int key);
 void printInorder(Tree root);
 void deleteTree(Tree root);
 
+//HW6
+Tree deleteNode(Tree root, int key);
+Tree getMaxValueInTree(Tree parentNode, Tree root);
+
 
 void main(int argc, char *argv[])
 {
@@ -36,7 +40,7 @@ void main(int argc, char *argv[])
 			break;
 		case 'd':
 			fscanf(fi, "%d", &key);
-			//deleteNode(root, key);
+			deleteNode(root, key);
 			break;
 		case 'f':
 			fscanf(fi, "%d", &key);
@@ -97,4 +101,53 @@ void deleteTree(Tree root)
 	if (root->left != NULL) { deleteTree(root->left); }
 	free(root);//Q&A
 	if (root->right != NULL) { deleteTree(root->right); }
+}
+
+//HW6
+Tree deleteNode(Tree root, int key)
+{
+	Tree tmpCell = NULL;
+
+	if (root == NULL)
+	{
+		printf("Deletion Error : %d is not in tree", key);
+	}
+	else if (key < root->value) { root->left = deleteNode(root->left, key); }
+	else if (key > root->value) { root->right = deleteNode(root->right, key); }
+	else if (root->left && root->right)
+	{
+		tmpCell = getMaxValueInTree(root->left, root);
+		root->value = tmpCell->value;
+		root->left = deleteNode(root->left, root->value);
+	}
+	else
+	{
+		tmpCell = root;
+		if (root->left == NULL)
+		{
+			root = root->right;
+		}
+		else if (root->right == NULL)
+		{
+			root = root->left;
+		}
+		free(tmpCell);
+	}
+	return root;
+}
+
+Tree getMaxValueInTree(Tree parentNode, Tree root)
+{
+	if (parentNode == NULL)
+	{
+		return NULL;
+	}
+	else if (parentNode->right == NULL) 
+	{
+		 return parentNode
+	}
+	else
+	{
+		parentNode(parentNode->right, root);
+	}
 }
