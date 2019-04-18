@@ -1,16 +1,19 @@
 #include <stdio.h>
+#include <stdlib.h>
 
-typedef struct HeapStruct
+struct HeapStruct
 {
 	int capacity;
 	int size;
 	int *element;
-}Heap;
+};
+typedef struct HeapStruct Heap;
+
 
 //Lab 7
 Heap* CreateHeap(int heapSize);
-void Insert(Heap *heap, int value);
-int Find(Heap *heap, int value);
+void Insert(Heap* heap, int value);
+int Find(Heap* heap, int value);
 
 //HW 7
 
@@ -19,11 +22,17 @@ void PrintMax(Heap* heap);
 
 void main(int argc, char *argv[])
 {
+	printf("hi");
+	printf("why?");
+	printf("???");
 	FILE *fi = fopen(argv[1], "r");
+	printf("hi");
 	char cv;
+	printf("hi");
 	Heap* maxHeap;
 	int heapSize, key;
-
+	
+	printf("hi");
 	while (!feof(fi))
 	{
 		fscanf(fi, "%c", &cv);
@@ -38,10 +47,10 @@ void main(int argc, char *argv[])
 			Insert(maxHeap, key);
 			break;
 		case 'd':
-			DeleteMax(maxHeap);
+//			DeleteMax(maxHeap);
 			break;
 		case 'p':
-			PrintHeap(maxHeap);
+//			PrintHeap(maxHeap);
 			break;
 		case 'f':
 			fscanf(fi, "%d", &key);
@@ -56,6 +65,7 @@ void main(int argc, char *argv[])
 			break;
 		}
 	}
+	fclose(fi);
 }
 
 Heap* CreateHeap(int heapSize)
@@ -69,7 +79,7 @@ Heap* CreateHeap(int heapSize)
 	return tmpHeap;
 }
 
-void Insert(Heap *heap, int value)
+void Insert(Heap* heap, int value)
 {
 	int i;
 
@@ -101,7 +111,7 @@ void Insert(Heap *heap, int value)
 		heap->element[i] = value;
 	}
 }
-int Find(Heap *heap, int value)
+int Find(Heap* heap, int value)
 {
 	for (int i = 1; value <= heap->size; i++)
 	{
