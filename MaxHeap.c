@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <math.h>
 
 struct HeapStruct
 {
@@ -17,8 +18,8 @@ int Find(Heap* heap, int value);
 
 //HW 7
 
-//int DeleteMax(Heap* heap);
-//void PrintMax(Heap* heap);
+int DeleteMax(Heap* heap);
+void PrintMax(Heap* heap);
 
 void main(int argc, char *argv[])
 {
@@ -42,10 +43,10 @@ void main(int argc, char *argv[])
 			Insert(maxHeap, key);
 			break;
 		case 'd':
-			//			DeleteMax(maxHeap);
+			DeleteMax(maxHeap);
 			break;
 		case 'p':
-			//			PrintHeap(maxHeap);
+			PrintHeap(maxHeap);
 			break;
 		case 'f':
 			fscanf(fi, "%d", &key);
@@ -120,4 +121,46 @@ int Find(Heap* heap, int value)
 	}
 
 	return 0;
+}
+
+int DeleteMax(Heap* heap)
+{
+	int i;
+
+	int MaxElement = heap->element[1];
+	int lastElement = heap->element[heap->size--];
+
+	for (i = 1; i <= heap->size;)
+	{
+		if (heap->element[2 * i] > heap->element[2 * i + 1])
+		{
+			if (heap->element[2 * i] < lastElement)
+			{
+				heap[i] = lastElement;
+				return MaxElement;
+			}
+			heap->element[i] = heap->element[2 * i];
+			i = 2 * i;
+		}
+		else
+		{
+			if (heap->element[2 * i + 1] < lastElement)
+			{
+				heap[i] = lastElement;
+				return MaxElement;
+			}
+			heap->element[i] = heap->element[2 * i + 1];
+			i = 2 * i + 1;
+		}
+	}
+	return MaxElement;
+}
+
+void PrintMax(Heap* heap)
+{
+	for (int i = 1; i <= heap->size; i++)
+	{
+		printf("%d  ", heap->element[i]);
+	}
+	printf("\n");
 }
