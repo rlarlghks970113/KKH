@@ -79,6 +79,10 @@ AVLTree Insert(ElementType X, AVLTree T)
 			{
 				T = SingleRotateWithLeft(T);
 			}
+			else
+			{
+				T = DoubleRotateWithLeft(T);
+			}
 		}
 	}
 	else if (X > T->Element)
@@ -89,6 +93,10 @@ AVLTree Insert(ElementType X, AVLTree T)
 			if(X > T->Right->Element)
 			{
 				T = SingleRotateWithRight(T);
+			}
+			else
+			{
+				T = DoubleRotateWithRight(T);
 			}
 		}
 	}
@@ -142,8 +150,18 @@ Position SingleRotateWithRight(Position node)
 
 	return K2;
 }
-Position DoubleRotateWithLeft(Position node);
-Position DoubleRotateWithRight(Position node);
+Position DoubleRotateWithLeft(Position node)
+{
+	node->Left = SingleRotateWithRight(node->Left);
+
+	return SingleRotateWithLeft(node);
+}
+Position DoubleRotateWithRight(Position node)
+{
+	node->Right = SingleRotateWithLeft(node->Right);
+
+	return SingleRotateWithRight(node);
+}
 int Height(Position node)
 {
 	if (node == NULL)
