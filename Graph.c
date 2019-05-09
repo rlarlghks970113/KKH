@@ -32,7 +32,6 @@ int IsFull(Queue Q);
 int Dequeue(Queue Q);
 void Enqueue(Queue Q, int X);
 void DeleteQueue(Queue Q);
-void MakeEmpty(Queue Q);
 
 void main(int argc, char *argv[])
 {
@@ -68,21 +67,7 @@ void main(int argc, char *argv[])
 		ptr = strtok(NULL, " ");
 	}
 
-	printf("  ");
-	for (int j = 0; j < graph->size; j++)
-	{
-		printf("%d ", graph->node[j]);
-	}
-	printf("\n");
-	for (int i = 0; i < graph->size; i++)
-	{
-		printf("%d ", graph->node[i]);
-		for (int j = 0; j < graph->size; j++)
-		{
-			printf("%d ", graph->matrix[i][j]);
-		}
-		printf("\n");
-	}
+	Topsort(graph);
 }
 
 Graph CreateGraph(int* nodes, int size)
@@ -134,4 +119,106 @@ void DeleteGraph(Graph G)
 	}
 	free(G->matrix);
 	free(G->node);
+}
+
+
+void Topsort(Graph G)
+{
+	Queue queue = MakeNewQueue(10);
+	int v, w;
+	int* indegree = malloc(sizeof(int) * G->size);
+	for (int i = 0; i < G->size; i++)
+	{
+		indegree[i] = 0;
+	}
+
+
+	for (int i = 0; i < G->size; i++)
+	{
+		for (int j = 0; j < G->size; j++)
+		{
+			if (G->matrix[j][i] == 1)
+			{
+				indegree[i]++;
+			}
+		}
+	}
+
+	for (int i = 0; i < G->size; i++)
+	{
+		if (indegree[i] == 0)
+		{
+			Enqueue(queue, G->node[i]);
+		}	
+	}
+
+	
+	while (!IsEmpty(queue))
+	{
+		v = Dequeue(queue);
+      		printf("%d ", v);
+		for (int i = 0; i < G->size; i++)
+		{
+  			if (v == G->node[i])
+			{
+				for (int j = 0; j < G->size; j++)
+				{
+					if (G->matrix[i][j] == 1)
+					{
+						G->matrix[i][j] = 0;
+						if (--indegree[j] == 0)
+						{
+							Enqueue(queue, G->node[j]);
+							
+						}
+					}
+				}
+			}
+		}
+	}
+
+}
+Queue MakeNewQueue(int X)
+{
+	Queue queue = malloc(sizeof(struct _Queue));
+	queue->key = malloc(sizeof(int)*X);
+	queue->first = 0;
+	queue->rear = 0;
+	queue->qsize = 0;
+	queue->max_queue_size = X;
+
+	return queue;
+}
+int IsEmpty(Queue Q)
+{
+	return Q->first == Q->rear;
+}
+int IsFull(Queue Q)
+{
+	return Q->first == (Q->rear + 1 % Q->max_queue_size);
+
+}
+int Dequeue(Queue Q)
+{
+	if (!IsEmpty(Q))
+	{
+		Q->first = (Q->first + 1) % Q->max_queue_size;
+		Q->qsize--;
+		return Q->key[Q->first];
+	}
+	return -1;
+}
+void Enqueue(Queue Q, int X)
+{
+	if (!IsFull(Q))
+	{
+		Q->rear = (Q->rear + 1) % Q->max_queue_size;
+		Q->key[Q->rear] = X;
+		Q->qsize++;
+	}
+}
+void DeleteQueue(Queue Q)
+{
+	free(Q->key);
+	free(Q);
 }
