@@ -45,25 +45,33 @@ void main(int argc, char *argv[])
 		printf("There is no file : %s\n", argv[1]);
 		exit(-1);
 	}
-	
+
 	fgets(str, sizeof(str), fp);
-	while (sscanf(str, "%d", &n) != EOF)
+
+	char* ptr = strtok(str, " ");
+	while (ptr != NULL)
 	{
-		numbers[i] = n;
+		numbers[i] = atoi(ptr);
 		i++;
+		ptr = strtok(NULL, " ");
 	}
+
 
 	Graph graph = CreateGraph(numbers, i);
 	fgets(str, sizeof(str), fp);
-	while (sscanf(str, "%d-%d", &a, &b) != EOF)
+	ptr = strtok(str, " ");
+	while (ptr != NULL)
 	{
+
+		sscanf(ptr, "%d-%d", &a, &b);
 		InsertEdge(graph, a, b);
+		ptr = strtok(NULL, " ");
 	}
-	
+
 	printf("  ");
 	for (int j = 0; j < graph->size; j++)
 	{
-		printf("%d ", graph->node[i]);
+		printf("%d ", graph->node[j]);
 	}
 	printf("\n");
 	for (int i = 0; i < graph->size; i++)
@@ -81,7 +89,11 @@ Graph CreateGraph(int* nodes, int size)
 {
 	Graph graph = (Graph)malloc(sizeof(struct _Queue));
 	graph->size = size;
-	graph->node = nodes;
+	graph->node = malloc(sizeof(int)*size);
+	for (int i = 0; i < size; i++)
+	{
+		graph->node[i] = nodes[i];
+	}
 	graph->matrix = (int**)malloc(sizeof(int*)*size);
 	for (int i = 0; i < graph->size; i++)
 	{
