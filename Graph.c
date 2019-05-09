@@ -36,8 +36,9 @@ void MakeEmpty(Queue Q);
 
 void main(int argc, char *argv[])
 {
-	char numbers[100];
+	int numbers[100];
 	int n, i = 0, a, b;
+	char str[100];
 	FILE *fp = fopen(argv[1], "r");
 	if (fp == NULL)
 	{
@@ -45,16 +46,16 @@ void main(int argc, char *argv[])
 		exit(-1);
 	}
 	
-	fgets(numbers, sizeof(numbers), fp);
-	while (fscanf(numbers, "%d", &n) != EOF)
+	fgets(str, sizeof(str), fp);
+	while (sscanf(str, "%d", &n) != EOF)
 	{
 		numbers[i] = n;
 		i++;
 	}
 
 	Graph graph = CreateGraph(numbers, i);
-	fgets(numbers, sizeof(numbers), fp);
-	while (fscanf(numbers, "%d-%d", &a, &b) != EOF)
+	fgets(str, sizeof(str), fp);
+	while (sscanf(str, "%d-%d", &a, &b) != EOF)
 	{
 		InsertEdge(graph, a, b);
 	}
