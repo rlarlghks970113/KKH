@@ -27,6 +27,7 @@ void main(int argc, char *argv[])
 	char cv;
 	int key;
 
+
 	Tree root = NULL;
 
 	while (!feof(fi))

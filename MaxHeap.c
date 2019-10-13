@@ -19,7 +19,7 @@ int Find(Heap* heap, int value);
 //HW 7
 
 int DeleteMax(Heap* heap);
-void PrintMax(Heap* heap);
+void PrintHeap(Heap* heap);
 
 void main(int argc, char *argv[])
 {
@@ -136,7 +136,7 @@ int DeleteMax(Heap* heap)
 		{
 			if (heap->element[2 * i] < lastElement)
 			{
-				heap[i] = lastElement;
+				heap->element[i] = lastElement;
 				return MaxElement;
 			}
 			heap->element[i] = heap->element[2 * i];
@@ -146,7 +146,7 @@ int DeleteMax(Heap* heap)
 		{
 			if (heap->element[2 * i + 1] < lastElement)
 			{
-				heap[i] = lastElement;
+				heap->element[i] = lastElement;
 				return MaxElement;
 			}
 			heap->element[i] = heap->element[2 * i + 1];
@@ -156,7 +156,7 @@ int DeleteMax(Heap* heap)
 	return MaxElement;
 }
 
-void PrintMax(Heap* heap)
+void PrintHeap(Heap* heap)
 {
 	for (int i = 1; i <= heap->size; i++)
 	{
