@@ -1,107 +1,5 @@
 #include "bpt.h"
 
-/* ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ파일 API ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ*/
-
-pagenum_t file_alloc_page()
-{
-	if (file_pointer == NULL)
-	{
-		printf("파일이 열리지 않았습니다.\n");
-		return -1;
-	}
-
-	
-
-	pagenum_t first_free_page_number, second_free_page_number;
-	//헤더 페이지의 free page 읽기
-	file_read_page(0, &page_data);
-	first_free_page_number = page_data.base.header_page.free_page_number;
-
-	//만약 다 할당했으면
-	if (first_free_page_number == 0)
-	{
-		printf("프리페이지 추가 할당\n");
-		pagenum_t num_of_page = page_data.base.header_page.number_of_pages;
-
-		//헤더페이지가 가르키느 프리페이지 할당
-		page_data.base.header_page.free_page_number = num_of_page;
-		file_write_page(0, &page_data);
-		int i;
-		for (i = 1; i < 256 * 10; ++i, ++num_of_page)
-		{
-			file_read_page(num_of_page, &page_data);
-			page_data.base.free_page.next_free_page_number = num_of_page + 1;
-			file_write_page(num_of_page, &page_data);
-		}
-		//마지막 free page가 가르키는건 0으로 한다.
-		file_read_page(num_of_page, &page_data);
-
-		page_data.base.free_page.next_free_page_number = 0;
-		file_write_page(num_of_page, &page_data);
-
-		file_read_page(0, &page_data);
-		page_data.base.header_page.number_of_pages += 256 * 10;
-		first_free_page_number = page_data.base.header_page.free_page_number;
-		file_write_page(0, &page_data);
-
-	}
-
-	//두번째 free page num 불러오기
-	file_read_page(first_free_page_number, &page_data);
-	second_free_page_number = page_data.base.free_page.next_free_page_number;
-
-	//헤더 페이지가 second_free_page_number를 가르키게 설정
-	file_read_page(0, &page_data);
-	page_data.base.header_page.free_page_number = second_free_page_number;
-	file_write_page(0, &page_data);
-
-	//할당할 free_page 넘겨주기
-	return first_free_page_number;
-}
-
-void file_free_page(pagenum_t pagenum)
-{
-	
-	pagenum_t next_page_num = 0, first_page_number = 0;
-	//헤더가 가르키는 첫번째 free page 저장
-	file_read_page(0, &page_data);
-	first_page_number = page_data.base.header_page.free_page_number;
-
-	//헤더페이지가 가르키는 free page가 pagenum을 가르키게 함
-	page_data.base.header_page.free_page_number = pagenum;
-	file_write_page(0, &page_data);
-
-	//비어있는 4096Byte의 문자열
-	page_t empty;
-
-	file_write_page(pagenum, &empty);
-
-	//해당 페이지가 first_page_number를 가르키게 하기
-	file_read_page(pagenum,&page_data);
-	page_data.base.free_page.next_free_page_number = first_page_number;
-	file_write_page(pagenum, &page_data);
-	
-
-}
-void file_read_page(pagenum_t pagenum, page_t* dest)
-{
-	//해당 페이지에 접근해서 dest에 저장
-	fflush(file_pointer);
-	fseek(file_pointer, PAGE_SIZE * pagenum, SEEK_SET);
-	fread(dest, sizeof(page_t), 1, file_pointer);
-}
-
-void file_write_page(pagenum_t pagenum, const page_t* src)
-{
-	//해당 페이지에 접근해서 src에 저장
-	fseek(file_pointer, PAGE_SIZE * pagenum, SEEK_SET);
-	fwrite(src, sizeof(page_t), 1, file_pointer);
-
-	fflush(file_pointer);
-
-}
-/*ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ파일 API 끝 ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ*/
-
 
 int open_table(char* pathname)
 {
@@ -116,7 +14,7 @@ int open_table(char* pathname)
 		{
 			return -1;
 		}
-		
+
 		//헤더페이지 초기화
 		file_read_page(0, &page_data);
 		page_data.base.header_page.free_page_number = 1;
@@ -140,7 +38,7 @@ int open_table(char* pathname)
 		page_data.base.free_page.next_free_page_number = 0;
 		file_write_page(i, &page_data);
 	}
-	
+
 	return table_id;
 }
 
@@ -200,7 +98,7 @@ pagenum_t insert_to_leaf_page(pagenum_t pagenum, record new_record)
 
 	//insertion 위치
 	int insertion_point = page_data.base.leaf_page.number_of_keys;
-	
+
 
 	//레코드 삽입
 	while (insertion_point > 0)
@@ -229,9 +127,9 @@ pagenum_t insert_to_leaf_page_after_split(pagenum_t pagenum, record new_record)
 	//오른쪽으로 옮길 자료들 복사
 	pagenum_t new_parent_pagenum = page_data.base.leaf_page.parent_page_number;
 	int32_t new_number_of_keys = ORDER - 1 - cut();
-	record* new_right_record = (record*)malloc(sizeof(record)*(ORDER-1));
+	record* new_right_record = (record*)malloc(sizeof(record)*(ORDER - 1));
 	pagenum_t new_right_sibling = page_data.base.leaf_page.right_sibling_page_number;
-	
+
 	int i = 0;
 	for (int j = cut(); j < ORDER - 1;)
 	{
@@ -257,7 +155,7 @@ pagenum_t insert_to_leaf_page_after_split(pagenum_t pagenum, record new_record)
 	{
 		page_data.base.leaf_page.records[i] = new_right_record[i];
 	}
-	
+
 	right_first = page_data.base.leaf_page.records[0].key;
 	file_write_page(new_right_pagenum, &page_data);
 
@@ -310,7 +208,7 @@ pagenum_t insert_to_leaf_page_after_split(pagenum_t pagenum, record new_record)
 
 		int number_of_key = page_data.base.leaf_page.number_of_keys;
 
-		for_insert_key = page_data.base.leaf_page.records[number_of_key-1].key;
+		for_insert_key = page_data.base.leaf_page.records[number_of_key - 1].key;
 		strcpy(value, page_data.base.leaf_page.records[number_of_key - 1].value);
 		(page_data.base.leaf_page.number_of_keys)--;
 		file_write_page(pagenum, &page_data);
@@ -347,7 +245,7 @@ pagenum_t insert_to_leaf_page_after_split(pagenum_t pagenum, record new_record)
 	return insert_to_parent_page(new_parent_pagenum, for_insert_key, pagenum, new_right_pagenum);
 }
 
-pagenum_t insert_to_parent_page(pagenum_t parent_pagenum, int64_t key,pagenum_t child_left , pagenum_t child_right)
+pagenum_t insert_to_parent_page(pagenum_t parent_pagenum, int64_t key, pagenum_t child_left, pagenum_t child_right)
 {
 	//루트 페이지 일때
 	if (parent_pagenum == NULL)
@@ -388,14 +286,14 @@ pagenum_t insert_to_parent_page(pagenum_t parent_pagenum, int64_t key,pagenum_t 
 	{
 		return insert_to_internal_page(parent_pagenum, key, child_right);
 	}
-	
+
 	return insert_to_internal_page_after_split(parent_pagenum, key, child_right);
 }
 
 //insert to internal page
 pagenum_t insert_to_internal_page(pagenum_t pagenum, int64_t key, pagenum_t child_pagenum)
 {
-	
+
 	file_read_page(pagenum, &page_data);
 	int number_of_keys = page_data.base.internal_page.number_of_keys;
 
@@ -408,7 +306,7 @@ pagenum_t insert_to_internal_page(pagenum_t pagenum, int64_t key, pagenum_t chil
 	//레코드 삽입
 	while (insertion_point > 0)
 	{
-		
+
 		if (page_data.base.internal_page.internal_record[insertion_point - 1].key < key) break;
 
 		//오른쪽에 복사
@@ -419,7 +317,7 @@ pagenum_t insert_to_internal_page(pagenum_t pagenum, int64_t key, pagenum_t chil
 
 	//데이터 수정
 	page_data.base.internal_page.number_of_keys++;
-	
+
 	file_write_page(pagenum, &page_data);
 
 	return 0;
@@ -438,7 +336,7 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 	int split = cut();
 	pagenum_t right_parent_page = page_data.base.internal_page.parent_page_number;
 
-	int32_t right_number_of_key = ORDER - 1 -split;
+	int32_t right_number_of_key = ORDER - 1 - split;
 	internal_record right_internal_records[ORDER - 1];
 
 	int j = 0;
@@ -470,7 +368,7 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 
 	//insert 부분
 	file_read_page(new_right_page, &page_data);
-	
+
 	pagenum_t right_left_most_pagenum;
 	pagenum_t for_insert_to_parent;
 	if (key == left_last || key == right_first)
@@ -484,7 +382,7 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 		right_left_most_pagenum = child_pagenum;
 		for_insert_to_parent = key;
 
-		
+
 	}
 	else if (left_last > key)
 	{
@@ -511,7 +409,7 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 		page_data.base.internal_page.number_of_keys--;
 		file_write_page(pagenum, &page_data);
 	}
-	else if(right_first < key)
+	else if (right_first < key)
 	{
 		//맨 오른쪽 일 때
 		internal_record internal_record_ = { key, child_pagenum };
@@ -534,7 +432,7 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 		for_insert_to_parent = page_data.base.internal_page.internal_record[0].key;
 
 		//맨 첫번째값 빼기
-		for (int i = 0; i < page_data.base.internal_page.number_of_keys -1; ++i)
+		for (int i = 0; i < page_data.base.internal_page.number_of_keys - 1; ++i)
 		{
 			page_data.base.internal_page.internal_record[i] = page_data.base.internal_page.internal_record[i + 1];
 		}
@@ -554,7 +452,7 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 	page_data.base.internal_page.parent_page_number = new_right_page;
 	file_write_page(right_left_most_pagenum, &page_data);
 
-	
+
 	for (int i = 0; i < right_number_of_key; ++i)
 	{
 		file_read_page(new_right_page, &page_data);
@@ -563,10 +461,10 @@ pagenum_t insert_to_internal_page_after_split(pagenum_t pagenum, int64_t key, pa
 		page_data.base.internal_page.parent_page_number = new_right_page;
 		file_write_page(next, &page_data);
 	}
-	
+
 
 	//쪼개졌으니 부모페이지(=internal page)에 insert
-	return insert_to_parent_page(right_parent_page, for_insert_to_parent,pagenum, new_right_page);
+	return insert_to_parent_page(right_parent_page, for_insert_to_parent, pagenum, new_right_page);
 }
 
 //놔눌 경우 오른쪽 배열의 첫칸 반환
@@ -698,12 +596,12 @@ int db_find(int64_t key, char* ret_val)
 			return -1;
 		}
 		else//리프페이지 아닐 때
-		{	
+		{
 			//left most page 일 때
 			if (key < page_data.base.internal_page.internal_record[0].key)
 			{
 				root = page_data.base.internal_page.left_most_page_number;
-				
+
 			}
 			else
 			{
@@ -711,17 +609,17 @@ int db_find(int64_t key, char* ret_val)
 				for (i = 0; i < number_of_key - 1; ++i)
 				{
 
-					if (page_data.base.internal_page.internal_record[i + 1].key >key)
+					if (page_data.base.internal_page.internal_record[i + 1].key > key)
 					{
 						root = page_data.base.internal_page.internal_record[i].page_number;
 						break;
 					}
-					
+
 				}
 				if (i == number_of_key - 1) root = page_data.base.internal_page.internal_record[i].page_number;
 			}
 		}
-		
+
 	}
 	//찾기 실패
 	return -1;
@@ -743,7 +641,7 @@ int db_delete(int64_t key)
 	free(new);
 
 	pagenum_t leaf_pagenum = find_leafpage(key);
-	
+
 	return delete_entry(leaf_pagenum, key);
 }
 
@@ -767,7 +665,7 @@ int delete_entry(pagenum_t pagenum, int64_t key)
 					page_data.base.leaf_page.records[i] = page_data.base.leaf_page.records[i + 1];
 				}
 				page_data.base.leaf_page.number_of_keys--;
-				
+
 				file_write_page(pagenum, &page_data);
 				break;
 			}
@@ -783,10 +681,10 @@ int delete_entry(pagenum_t pagenum, int64_t key)
 			//해당 키 만나면 삭제하고 빠져나오기
 			if (page_data.base.internal_page.internal_record[deletion_point].key == key)
 			{
-			//	if (deletion_point == 0)
-				//{
-			//		page_data.base.internal_page.left_most_page_number = page_data.base.internal_page.internal_record[0].page_number;
-			//	}
+				//	if (deletion_point == 0)
+					//{
+				//		page_data.base.internal_page.left_most_page_number = page_data.base.internal_page.internal_record[0].page_number;
+				//	}
 
 				for (int i = deletion_point; i < num_of_key - 1; ++i)
 				{
@@ -809,6 +707,7 @@ int delete_entry(pagenum_t pagenum, int64_t key)
 	{
 		return adjust_root(pagenum);
 	}
+
 
 	//underflow일 때
 	pagenum_t parent_page, neighbor_page;
@@ -865,7 +764,7 @@ int delete_entry(pagenum_t pagenum, int64_t key)
 					page_data.base.internal_page.internal_record[i].key = for_change_key;
 					break;
 				}
-				
+
 				if (i == num_of_key - 1) find = 0;
 			}
 
@@ -880,7 +779,7 @@ int delete_entry(pagenum_t pagenum, int64_t key)
 int adjust_root(pagenum_t root)
 {
 	file_read_page(root, &page_data);
-	
+
 	if (page_data.base.internal_page.number_of_keys > 0)
 	{
 		return 0;
@@ -1115,7 +1014,75 @@ void print_tree()
 	printf("\n\n");
 }
 
-void main()
-{
 
+
+
+
+
+
+int main()
+{
+	srand(time(NULL));
+	int table_id = open_table("file");
+
+	page_t a;
+	printf("%d\n", sizeof(a.base.free_page));
+	printf("%d\n", sizeof(a.base.header_page));
+	printf("%d\n", sizeof(a.base.internal_page));
+	printf("%d\n", sizeof(a.base.leaf_page));
+
+	printf("테이블 아이디 %d\n", table_id);
+
+	int input_key;
+	char* value = (char*)malloc(sizeof(char) * 120);
+	char instruction = ' ';
+	while (instruction != 'q')
+	{
+		scanf("%c", &instruction);
+		switch (instruction)
+		{
+		case 'i':
+			for (int i = 0; i < 1000; ++i)
+			{
+				//scanf("%d", &input_key);
+				printf("%d\n", i);
+				input_key = rand() % 1000000 + 1;
+				db_insert(input_key, "ad");
+
+
+			}
+			print_tree();
+
+
+			break;
+		case 'f':
+			scanf("%d", &input_key);
+
+			printf("성공했을까? -> %d\n", db_find(input_key, value));
+			printf("반환된 value : %s\n", value);
+			break;
+		case 'd':
+			//scanf("%d", &input_key);
+
+		//	for (int i = 0; i < 100; ++i)
+			//{
+			scanf("%d", &input_key);
+			//input_key = rand() % 100 + 1;
+			db_delete(input_key);
+			printf("delete %d\n", input_key);
+			print_tree();
+
+
+			//				}
+			break;
+		case'p':
+			print_tree();
+		default:
+			break;
+		}
+
+
+	}
+
+	return 0;
 }

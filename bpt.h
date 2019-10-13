@@ -1,7 +1,10 @@
+#ifndef BPT_H
+#define BPT_H
 
 #define _CRT_SECURE_NO_WARNINGS
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
@@ -179,3 +182,107 @@ void enqueue(pagenum_t new_pagenum);
 
 //level order를 위한 deque
 pagenum_t dequeue();
+
+/* ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ파일 API ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ*/
+
+pagenum_t file_alloc_page()
+{
+	if (file_pointer == NULL)
+	{
+		printf("파일이 열리지 않았습니다.\n");
+		return -1;
+	}
+
+
+
+	pagenum_t first_free_page_number, second_free_page_number;
+	//헤더 페이지의 free page 읽기
+	file_read_page(0, &page_data);
+	first_free_page_number = page_data.base.header_page.free_page_number;
+
+	//만약 다 할당했으면
+	if (first_free_page_number == 0)
+	{
+		printf("프리페이지 추가 할당\n");
+		pagenum_t num_of_page = page_data.base.header_page.number_of_pages;
+
+		//헤더페이지가 가르키느 프리페이지 할당
+		page_data.base.header_page.free_page_number = num_of_page;
+		file_write_page(0, &page_data);
+		int i;
+		for (i = 1; i < 256 * 10; ++i, ++num_of_page)
+		{
+			file_read_page(num_of_page, &page_data);
+			page_data.base.free_page.next_free_page_number = num_of_page + 1;
+			file_write_page(num_of_page, &page_data);
+		}
+		//마지막 free page가 가르키는건 0으로 한다.
+		file_read_page(num_of_page, &page_data);
+
+		page_data.base.free_page.next_free_page_number = 0;
+		file_write_page(num_of_page, &page_data);
+
+		file_read_page(0, &page_data);
+		page_data.base.header_page.number_of_pages += 256 * 10;
+		first_free_page_number = page_data.base.header_page.free_page_number;
+		file_write_page(0, &page_data);
+
+	}
+
+	//두번째 free page num 불러오기
+	file_read_page(first_free_page_number, &page_data);
+	second_free_page_number = page_data.base.free_page.next_free_page_number;
+
+	//헤더 페이지가 second_free_page_number를 가르키게 설정
+	file_read_page(0, &page_data);
+	page_data.base.header_page.free_page_number = second_free_page_number;
+	file_write_page(0, &page_data);
+
+	//할당할 free_page 넘겨주기
+	return first_free_page_number;
+}
+
+void file_free_page(pagenum_t pagenum)
+{
+
+	pagenum_t next_page_num = 0, first_page_number = 0;
+	//헤더가 가르키는 첫번째 free page 저장
+	file_read_page(0, &page_data);
+	first_page_number = page_data.base.header_page.free_page_number;
+
+	//헤더페이지가 가르키는 free page가 pagenum을 가르키게 함
+	page_data.base.header_page.free_page_number = pagenum;
+	file_write_page(0, &page_data);
+
+	//비어있는 4096Byte의 문자열
+	page_t empty;
+
+	file_write_page(pagenum, &empty);
+
+	//해당 페이지가 first_page_number를 가르키게 하기
+	file_read_page(pagenum, &page_data);
+	page_data.base.free_page.next_free_page_number = first_page_number;
+	file_write_page(pagenum, &page_data);
+
+
+}
+void file_read_page(pagenum_t pagenum, page_t* dest)
+{
+	//해당 페이지에 접근해서 dest에 저장
+	fflush(file_pointer);
+	fseek(file_pointer, PAGE_SIZE * pagenum, SEEK_SET);
+	fread(dest, sizeof(page_t), 1, file_pointer);
+}
+
+void file_write_page(pagenum_t pagenum, const page_t* src)
+{
+	//해당 페이지에 접근해서 src에 저장
+	fseek(file_pointer, PAGE_SIZE * pagenum, SEEK_SET);
+	fwrite(src, sizeof(page_t), 1, file_pointer);
+
+	fflush(file_pointer);
+
+}
+/*ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ파일 API 끝 ㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡㅡ*/
+
+#endif
