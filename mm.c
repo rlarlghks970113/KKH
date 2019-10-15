@@ -1,27 +1,9 @@
 /* 
- * mm-implicit.c -  Simple allocator based on implicit free lists, 
- *                  first fit placement, and boundary tag coalescing. 
- *
- * Each block has header and footer of the form:
- * 
- *      31                     3  2  1  0 
- *      -----------------------------------
- *     | s  s  s  s  ... s  s  s  0  0  a/f
- *      ----------------------------------- 
- * 
- * where s are the meaningful size bits and a/f is set 
- * iff the block is allocated. The list has the following form:
- *
- * begin                                                          end
- * heap                                                           heap  
- *  -----------------------------------------------------------------   
- * |  pad   | hdr(8:a) | ftr(8:a) | zero or more usr blks | hdr(8:a) |
- *  -----------------------------------------------------------------
- *          |       prologue      |                       | epilogue |
- *          |         block       |                       | block    |
- *
- * The allocated prologue and epilogue blocks are overhead that
- * eliminate edge conditions during coalescing.
+ * 시스템 프로그래밍 동적할당 구현 과제
+ *  
+ * 학과 : 컴퓨터소프트웨어학과
+ * 학번 : 2016024739
+ * 이름 : 김기환 
  */
 #include <stdio.h>
 #include <unistd.h>
@@ -31,11 +13,17 @@
 #include "memlib.h"
 
 
-
 /*
- * If NEXT_FIT defined use next fit search, else use first fit search 
+ * 구현 방식
+ *
+ * | header | next | prev | ....payload.... | footer |
+ *
+ * explicit free list를 순차적으로 만들었다.
+ *
+ *
+ *
  */
-#define NEXT_FIT
+
 
 
 
@@ -68,25 +56,31 @@
 #define NEXT_BLKP(bp)  ((char *)(bp) + GET_SIZE(((char *)(bp) - WSIZE)))
 #define PREV_BLKP(bp)  ((char *)(bp) - GET_SIZE(((char *)(bp) - DSIZE)))
 
-/* need to inform of this function*/
-#define FT_NEXT(bp)  ((char*)(bp) + GET_SIZE((char*)(bp) - WSIZE) - WSIZE - DSIZE)
-#define FT_PREV(bp)  ((char*)(bp) + GET_SIZE((char*)(bp) - WSIZE) - WSIZE - WSIZE)
-
 /* $end mallocmacros */
 
 /* Global variables */
 static char *_heap_listp;  /* pointer to first block */  
 
-//first free 
-char *_free_listp;
 
-#ifdef NEXT_FIT
-static char *rover;       /* next fit rover */
-#endif
+
+/* 내가 정의한 것들*/
+
+#define GET_NEXT(bp)  (*(char**)(bp))
+#define GET_PREV(bp)  (*(char**)(bp + WSIZE))
+
+/* free list들 중 주소가 가장 높은 것을 지정한다.*/
+char *_free_listp = NULL;
+
+void insert_free(char* ptr);
+
+void delete_free(char* ptr);
+
+/* 내가 정의 한 것 끝*/
 
 static int _heap_ext_counter=0;
 
 /* function prototypes for internal helper routines */
+
 static void *extend_heap(size_t words);
 static void place(void *bp, size_t asize);
 static void *find_fit(size_t asize);
@@ -94,8 +88,6 @@ static void *coalesce(void *bp);
 static void printblock(void *bp); 
 static void checkblock(void *bp);
 
-//for project
-static void *find_free(size_t asize);
 
 char* get_heap_listp() {
     return _heap_listp;
@@ -106,31 +98,31 @@ char* set_and_get_heap_listp(char* ptr) {
 }
 
 /* 
- * mm_init - Initialize the memory manager 
+ * mm_init - 동적할당을 위해 인터페이스를 짜는 함수
  */
 /* $begin mminit */
 int mm_init(void) 
 {
     /* create the initial empty heap */
-    if (set_and_get_heap_listp(mem_sbrk(8*WSIZE)) == (void *)-1)
-	return -1;
+	if (set_and_get_heap_listp(mem_sbrk(6 * WSIZE)) == (void *)-1)
+	{
+		return -1;
+	}
     PUT(get_heap_listp(), 0);                        /* alignment padding */
-    PUT(get_heap_listp()+WSIZE, PACK(2*DSIZE, 1));  /* prologue header */
-    PUT(get_heap_listp()+WSIZE * 4, PACK(2*DSIZE, 1))/*prologue foot*/ 
-    PUT(get_heap_listp()+WSIZE * 5 , PACK(0, 1));   /* epilogue header */
-    PUT(get_heap_listp()+WSIZE * 2, 0); //next
-    PUT(get_heap_listp()+WSIZE * 3, 0); // prev
-    set_and_get_heap_listp(get_heap_listp()+2*WSIZE);
+    PUT(get_heap_listp() + WSIZE, PACK(DSIZE, 1));  /* prologue header */
+	PUT(get_heap_listp() + WSIZE * 2, 0); //next
+    PUT(get_heap_listp() + WSIZE * 3, 0); //prev
+	PUT(get_heap_listp() + WSIZE * 5, PACK(0, 1));   /* epilogue header */
+	set_and_get_heap_listp(get_heap_listp() + 2 * WSIZE);
 
 
-#ifdef NEXT_FIT
-    _free_listp = get_heap_listp();
-    rover = get_heap_listp();
-#endif
-    mm_checkheap(1);
+	
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
-    if (extend_heap(CHUNKSIZE/WSIZE) == NULL)
-	return -1;
+	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
+	{
+		return -1;
+	}
+
     return 0;
 }
 /* $end mminit */
@@ -157,17 +149,17 @@ void *mm_malloc(size_t size)
 	}
    	else
 	{
-		alloc_size = DSIZE*((DSIZE + DSIZE + OVERHEAD -1 + size) /DSIZE);
+		alloc_size = DSIZE*((DSIZE + OVERHEAD -1 + size) /DSIZE);
 	}
     
-    /* Search the free list for a fit */
-	if ((bp = find_free(alloc_size)) != NULL) 
+    /* 맞는게 있으면 거기다 둔다 */
+	if ((bp = find_fit(alloc_size)) != NULL) 
 	{
 		place(bp, alloc_size);
 		return bp;
 	}
 
-    /* No fit found. Get more memory and place the block */
+    /* 맞는게 없으면 heap의 사이즈를 늘린다. */
     extendsize = MAX(alloc_size,CHUNKSIZE);
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL) {
 		return NULL;
@@ -180,24 +172,16 @@ void *mm_malloc(size_t size)
 /* $end mmmalloc */
 
 //same with find_fit 
-static void *find_free(size_t asize)
+static void *find_fit(size_t asize)
 {
-	/* next fit search */
-	char *oldrover = rover;
-
-    /* search from the rover to the end of list */
-	for ( ; rover != 0  ; rover = GET(FT_NEXT(rover)))
+	char* ptr;
+	for (ptr = _free_listp; ptr != NULL; ptr = GET_NEXT(ptr))
 	{
-		if ( asize <= GET_SIZE(HDRP(rover)))
+		if (GET_SIZE(HDRP(ptr)) <= asize)
 		{
-			return rover;
+			return ptr;
 		}
-	}	
-
-    /* search from start of list to old rover */
-	for (rover = _free_listp; rover < oldrover; rover = GET(FT_NEXT(rover)))
-		if (asize <= GET_SIZE(HDRP(rover)))
-	    		return rover;
+	}
 	
 	return NULL;  /* no fit found */ 	
 }
@@ -227,11 +211,11 @@ void *mm_realloc(void *ptr, size_t size)
 void mm_checkheap(int verbose) 
 {
     char *bp = get_heap_listp();
-
+	
     if (verbose)
 	printf("Heap (%p):\n", get_heap_listp());
 
-    if ((GET_SIZE(HDRP(get_heap_listp())) !=2* DSIZE) || !GET_ALLOC(HDRP(get_heap_listp())))
+    if ((GET_SIZE(HDRP(get_heap_listp())) != DSIZE) || !GET_ALLOC(HDRP(get_heap_listp())))
 	printf("Bad prologue header\n");
     checkblock(get_heap_listp());
 
@@ -259,174 +243,92 @@ static void *extend_heap(size_t words)
     size_t size;
     _heap_ext_counter++;
 	
-    /* Allocate an even number of words to maintain alignment */
+    /* 홀수인 수가 나왔으면 짝수의 수로 바꿔준다. */
     size = (words % 2) ? (words+1) * WSIZE : words * WSIZE;
-    if ((bp = mem_sbrk(size)) == (void *)-1) 
-	return NULL;
+	if ((bp = mem_sbrk(size)) == (void *)-1)
+	{
+		return NULL;
+	}
 
-
-    /* Initialize free block header/footer and the epilogue header */
-    PUT(bp, PACK(size, 0));         /* free block header */
-    PUT(bp + size - WSIZE, PACK(size, 0));         /* free block footer */
-    PUT(bp + size - DSIZE, 0);
-    PUT(bp + size - DSIZE - WSIZE, 0);
-    bp += WSIZE;
+    /* header와 footer만 만들고 next와 prev는 colaesce단계에서 다루기로 한다 */
+    PUT(HDRP(bp), PACK(size, 0));         /* 헤더 만들기 */
+	PUT(FTRP(bp), PACK(size, 0));	      /* 푸터 만들기 */
     PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
 
     /* Coalesce if the previous block was free */
     return coalesce(bp);
 }
-/* $end mmextendheap */
+
 
 /* 
  * place - Place block of asize bytes at start of free block bp 
  *         and split if remainder would be at least minimum block size
  */
-/* $begin mmplace */
-/* $begin mmplace-proto */
 static void place(void *bp, size_t asize)
-/* $end mmplace-proto */
 {
     size_t csize = GET_SIZE(HDRP(bp));   
 	char* prev, next;
 	
-    if ((csize - asize) >= (DSIZE + DSIZE + OVERHEAD)) { 
-	PUT(HDRP(bp), PACK(asize, 1));
-	PUT(FTRP(bp), PACK(asize, 1));
-	prev = GET(FT_PREV(bp));
-	next = GET(FT_NEXT(bp));
-	bp = NEXT_BLKP(bp);
-	PUT(HDRP(bp), PACK(csize-asize, 0));
-	PUT(FTRP(bp), PACK(csize-asize, 0));
-
-	//change prev
-	if(prev != 0)
-	{
-		PUT(FT_NEXT(prev), bp);
-	}
-
-	if(next != 0)
-	{
-		PUT(FT_PREV(next), bp);
-	}
-	rover = bp;
+	//어차피 빈 할당된 것이 되면은 next와 prev는 쓰지않으니 총 (2 * DSIZE)보다 같거나 크면 나머지 공간을 이용할 수 있다.
+    if ((csize - asize) >= (DSIZE + OVERHEAD)) { 
+		PUT(HDRP(bp), PACK(asize, 1));
+		PUT(FTRP(bp), PACK(asize, 1));
+		delete_free(bp);
+		bp = NEXT_BLKP(bp);
+		PUT(HDRP(bp), PACK(csize-asize, 0));
+		PUT(FTRP(bp), PACK(csize-asize, 0));
+		insert_free(bp);
     }
     else { 
-	prev = GET(FT_PREV(bp));
-	next = GET(FT_NEXT(bp));	
-
-	PUT(HDRP(bp), PACK(csize, 1));
-	PUT(FTRP(bp), PACK(csize, 1));
-	if(prev != 0)
-	{
-		PUT(FT_NEXT(prev), next);
-	}
-	else
-	{
-		_free_listp = bp;
-	}
-	
-	if(next != 0)
-	{
-		PUT(FT_PREV(next), prev);
-	}
-	rover =next;
-	
+		//만약 모두 할당 되었다면 free_list에서 지워준다.
+		PUT(HDRP(bp), PACK(csize, 1));
+		PUT(FTRP(bp), PACK(csize, 1));
+		delete_free(bp);
     }
 }
-/* $end mmplace */
+
 
 
 /*
- * coalesce - boundary tag coalescing. Return ptr to coalesced block
+ * coalesce - boundary tag를 이용하여 4가지 케이스로 지운다.
+ *			- LIFO방식을 이용했기 때문에 더 간단하다.
  */
-static void *coalesce(void *bp) 
+static void *coalesce(void *bp)
 {
-    char* prev = PREV_BLKP(bp);
-    char* next = NEXT_BLKP(bp);    
-    while(prev > get_heap_listp() && GET_ALLOC(FTRP(prev)) && prev != PREV_BLKP(bp))
-    {
-	prev = PREV_BLKP(bp);
-	if(prev < get_heap_listp())
-	{
-		prev = NULL;
-		break;
-	}
-    }
-    
-    while(GET_SIZE(HDRP(next)) > 0 && GET_ALLOC(HDRP(next)) && next != NEXT_BLKP(bp))
-    {
-	next = NEXT_BLKP(bp);
-	if(GET_SIZE(HDRP(next)) <= 0)
-	{
-		next = NULL;
-		break;
-	}
-    }
-    printf("coalesce prev %p\n", prev);
-    printf("%p\n", next);	
-    size_t prev_alloc;
-    if(PREV_BLKP(bp) < get_heap_listp())
-    {
-	prev_alloc = 1;
-    }
-    else
-    {
-	prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(bp)));
-    }
+	/*앞 자리와 뒷자리 검사*/
 
-    size_t next_alloc;
-    if(GET_SIZE(HDRP(NEXT_BLKP(bp))) <= 0)
-    {
-	next_alloc = 1;
-    }
-    else
-    {
-    	next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-    }
-    size_t size = GET_SIZE(HDRP(bp));
+	//bp에서 앞자리로 이동해도 주소 변화가 없는 것은 맨 앞자리이기 때문이다.
+	int prev_alloc = (GET_ALLOC(FTRP(PREV_BLKP(bp))) | PREV_BLKP(bp) == bp);
+    //에필로그 헤더가 있으니 맨 끝 상황에서도 잘 작동한다.
+	int next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
 
-    if (prev_alloc && next_alloc) {          /* Case 1 : front alloc && back  alloc */
+    if (prev_alloc && next_alloc) {          /* Case 1 : 앞자리와 뒷자리 모두 할당된 상태 일 때*/
+		delete_free(bp);
+		return bp;
+    }
+    else if (prev_alloc && !next_alloc) {      /* Case 2 : 앞자리는 할당, 뒷자리는 할당되지 않은 상태 일 때 */
+		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
+		delete_free(NEXT_BLKP(bp));
+		PUT(HDRP(bp), PACK(size, 0));
+		PUT(FTRP(bp), PACK(size,0));
+		//어차피 next, prev는 그대로 유지되니 놔둔다.
+    }
+    else if (!prev_alloc && next_alloc) {      /* Case 3 : 앞자리는 할당 되지않고, 뒷자리는 할당 되었을 때*/
+		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
+		delete_free(bp);
+		PUT(FTRP(bp), PACK(size, 0));
+		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+		bp = PREV_BLKP(bp);
+    }
+    else {                                     /* Case 4 : 앞자리와 뒷자리 모두 할당 되지 않았을 때*/
+		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+		delete_free(NEXT_BLKP(bp));
+		delete_free(bp);
+		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
+		PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
+		bp = PREV_BLKP(bp);
+    }
 	
-    }
-    else if (prev_alloc && !next_alloc) {      /* Case 2 : front alloc && back not alloc*/
-	size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
-	PUT(HDRP(bp), PACK(size, 0));
-	PUT(FTRP(bp), PACK(size,0));
-    }
-    else if (!prev_alloc && next_alloc) {      /* Case 3 : front not alloc && back alloc*/
-	size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-	PUT(FTRP(bp), PACK(size, 0));
-	PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-	bp = PREV_BLKP(bp);
-    }
-
-    else {                                     /* Case 4 : front not alloc && back not alloc*/
-	size += GET_SIZE(HDRP(PREV_BLKP(bp))) + 
-	    GET_SIZE(FTRP(NEXT_BLKP(bp)));
-	PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
-	PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
-	bp = PREV_BLKP(bp);
-    }
-    
-    if(prev != NULL)
-    {
-    	PUT(FT_NEXT(prev), bp);
-	PUT(FT_PREV(bp), prev);
-    }
-    else
-    {
-    	_free_listp = bp;
-    }
-
-    if(next != NULL)
-    {
-	PUT(FT_PREV(next), bp);
-	PUT(FT_NEXT(bp), next);
-    }
-    
-    
-
 
     return bp;
 }
@@ -459,4 +361,39 @@ static void checkblock(void *bp)
 	printf("Error: header does not match footer\n");
 }
 
+
+void insert_free(char* ptr)
+{
+	//삽입이 처음이면은 초기화시켜준다
+	if (_free_listp == NULL)
+	{
+		_free_listp = ptr;
+		GET_PREV(ptr) = NULL;
+		GET_NEXT(ptr) = NULL;
+		return;
+	}
+	//가장 마지막에 이중 연결 리스트 방식으로 연결해준다.
+	GET_NEXT(ptr) = _free_listp;
+	GET_PREV(ptr) = NULL;
+	GET_PREV(_free_listp) = ptr;
+
+	_free_listp = ptr;
+}
+
+void delete_free(char* ptr)
+{
+
+	//맨 마지막이면 앞의 노드와의 연결을 끊는다.
+	if (GET_PREV(ptr) == NULL)
+	{
+		_free_listp = GET_NEXT(ptr);
+		GET_PREV(GET_NEXT(ptr)) = NULL;
+	}
+	else//중간이면 뒤의 노드와 앞의 노드를 연결시켜준다.
+	{
+		GET_NEXT(GET_PREV(ptr)) = GET_NEXT(ptr);
+		GET_PREV(GET_NEXT(ptr)) = GET_PREV(ptr);
+	}
+
+}
 
