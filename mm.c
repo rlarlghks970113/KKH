@@ -19,8 +19,8 @@
  * | header | next | prev | ....payload.... | footer |
  *
  * explicit free list를 순차적으로 만들었다.
- *
- *
+ * 
+ * 방식은 free_list를 LIFO 방식으로 스택처럼 구현했다.
  *
  */
 
@@ -68,11 +68,13 @@ static char *_heap_listp = 0;  /* pointer to first block */
 #define GET_NEXT(bp)  (*(char**)(bp))
 #define GET_PREV(bp)  (*(char**)(bp + WSIZE))
 
-/* free list들 중 주소가 가장 높은 것을 지정한다.*/
+/* free list들 중 가장 마지막에 삽입된 것을 가르킨다.*/
 static char *_free_listp = NULL;
 
+/* free_list에 삽입하는 함수*/
 static void insert_free(char* ptr);
 
+/* free_list에서 삭제하는 함수*/
 static void delete_free(char* ptr);
 
 /* 내가 정의 한 것 끝*/
@@ -100,23 +102,30 @@ char* set_and_get_heap_listp(char* ptr) {
 /* 
  * mm_init - 동적할당을 위해 인터페이스를 짜는 함수
  */
-/* $begin mminit */
+/* 앞부분의 프롤로그 헤더를 만드는 부분
+ *
+ * free_listp의 루트를 프롤로그 헤더부분에 만들어 둔다.
+ *
+ */
 int mm_init(void) 
 {
-    /* create the initial empty heap */
+    /* 힙영역을 늘려준다 */
 	if (set_and_get_heap_listp(mem_sbrk(6 * WSIZE)) == (void *)-1)
 	{
 		return -1;
 	}
-   	PUT(get_heap_listp(), 0);                        /* alignment padding */
-   	PUT(get_heap_listp() + WSIZE, PACK(DSIZE, 1));  /* prologue header */
-	PUT(get_heap_listp() + WSIZE * 2, PACK(DSIZE, 1)); //next
-	PUT(get_heap_listp() + WSIZE * 3, PACK(0, 1));   /* epilogue header */
+	/* 늘려진 힙영역에 값을 지정해준다*/
+   	PUT(get_heap_listp(), 0);                        /* 헷갈리지 않기 위한 padding 부분 */
+   	PUT(get_heap_listp() + WSIZE, PACK(DSIZE, 1));  /* 프롤로그 헤더 */
+	PUT(get_heap_listp() + WSIZE * 2, PACK(DSIZE, 1)); /* 프롤로그 푸터 */
+	PUT(get_heap_listp() + WSIZE * 3, PACK(0, 1));   /* 에필로그 헤더 */
+
+	/* get_heap_listp를 헤더의 바로 뒷자리로 이동시켜줘서 헤더를 가르키게 만든다. */
 	set_and_get_heap_listp(get_heap_listp() + 2 * WSIZE);
 
 	_free_listp = get_heap_listp();
 	
-    /* Extend the empty heap with a free block of CHUNKSIZE bytes */
+    /* 힙의 크기를 늘려준다 */
 	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
 	{
 		return -1;
@@ -124,24 +133,24 @@ int mm_init(void)
 
     return 0;
 }
-/* $end mminit */
 
 /* 
- * mm_malloc - Allocate a block with at least size bytes of payload 
+ * mm_malloc - 힙영역에 메모리를 동적할당하는 역할을 한다.
+ *
  */
-/* $begin mmmalloc */
+
 void *mm_malloc(size_t size) 
 {
-	int alloc_size;      /* adjusted block size */
-	int extendsize; /* amount to extend heap if no fit */
+	int alloc_size;      /* 할당할 사이즈 (=Byte 단위) */
+	int extendsize; /* 최소한의 할당 사이즈 (=chunck size보다 크거나 같아야 한다.) */
 	char *bp;      
 
-    /* Ignore spurious requests */
+    /* 이상한 size가 들어오면은 null 반환 */
 	if (size <= 0) 
 	{
 		return NULL;
 	}
-    /* Adjust block size to include overhead and alignment reqs. */
+    /* 사이즈가 최소한의 사이즈보다 작으면 최소크기 지정 */
   	if (size <= DSIZE)
 	{
 		alloc_size = DSIZE + OVERHEAD;
@@ -163,70 +172,77 @@ void *mm_malloc(size_t size)
     if ((bp = extend_heap(extendsize/WSIZE)) == NULL) {
 		return NULL;
 	 }
+	/* 힙사이즈를 늘리고 넣는다 */
     place(bp, alloc_size);
 
     return bp;
 } 
-/* $end mmmalloc */
 
-//same with find_fit 
+
+/* free_list를 돌면서 크기가 알맞은 free_list의 주소를 반환한다 */
 static void *find_fit(size_t asize)
 {
 	char* ptr;
+	/* fee_list를 돈다*/
 	for (ptr = _free_listp; GET_ALLOC(HDRP(ptr)) == 0; ptr = GET_NEXT(ptr))
 	{
+		/* 만약 크기가 맞는게 있다면  반환*/
 		if (GET_SIZE(HDRP(ptr)) >= asize)
 		{
 			return ptr;
 		}
 	}
 	
-	return NULL;  /* no fit found */ 	
+	/* 크기가 맞는게 없다면 NULL반환 */
+	return NULL;   	
 }
 /* 
- * mm_free - Free a block 
+ * mm_free - free하는 함수
  */
-/* $begin mmfree */
 void mm_free(void *bp)
 {
+	//주어진 bp포인터 주소에 bp의 원래 사이즈만큼 alloc bit를 0으로 바꿔준다.
 	size_t size = GET_SIZE(HDRP(bp));
 	PUT(HDRP(bp), PACK(size, 0));
 	PUT(FTRP(bp), PACK(size, 0));
+	//free가 되었으니 합친다.
 	coalesce(bp);
 }
 
-/* $end mmfree */
+
 
 /*
- * mm_realloc - naive implementation of mm_realloc
+ * mm_realloc - realloc과 동일하게 실행된다
  */
 void *mm_realloc(void *ptr, size_t size)
 {
+	/* 원래의 ptr이 가르키는 size*/
 	size_t original_size;
+	/* 합치기 과정을 위한 new_ptr*/
 	void* new_ptr;
+	/* 요구한 사이즈에 header, footer의 크기를 집어 넣는다*/
 	size += 2 * WSIZE;
 	
+	/* ptr이 NULL값이면 malloc과 동일*/
 	if(ptr == NULL)
 	{
 		return  mm_malloc(size);
 	}
 	
+	/* size가 0이면 free랑 동일*/
 	if(size == 0)
 	{
 		mm_free(ptr);
 		return NULL;
 	}
 	
+	/* ptr이 가르키는 것의 원래 크기*/
 	original_size = GET_SIZE(HDRP(ptr));
 	
-	if(original_size == size)
+	
+	if(original_size >= size) /* 원하는 사이즈가 원래의 사이즈보다 작거나 같은경우*/
 	{
-		printf("1\n");
-		return ptr;
-	}
-	else if(original_size > size)
-	{
-		printf("2");
+		/* 왜 인지는 모르겠으나 이 부분을 넣을 경우 error가 난다.*/
 	/*	if(original_size - size >= 2 * DSIZE)
 		{
 			printf("-> 1\n");
@@ -240,16 +256,21 @@ void *mm_realloc(void *ptr, size_t size)
 			return PREV_BLKP(ptr);
 		}
 		else
-		{*/
-			printf("-> 2\n");
+
+			
+			/* 사이즈가 작거나 같은 경우 그냥 통채로 반환 해준다*/
 			return ptr;
-	//	}
+
 	}
-	else if(original_size < size)
-	{	printf("3");
-		_Bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr))) || ptr == PREV_BLKP(ptr);
-		_Bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
+	else if(original_size < size)/* 원하는 사이즈가 원래의 사이즈보다 큰 경우*/
+	{	
+		
+		_Bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr))) || ptr == PREV_BLKP(ptr);/* 앞 칸이 alloc 되어 있는지 확인*/
+		_Bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));/* 뒷 칸이 alloc 되어 있는지 확인*/
+		/* total_size == 이용 가능한 크기*/
 		size_t total_size = original_size;
+
+		/* 만약 앞이나 뒤칸이 free상태라면은 total_size를 늘려준다*/
 		if(!prev_alloc)
 		{	
 			total_size += GET_SIZE(FTRP(PREV_BLKP(ptr)));
@@ -259,12 +280,13 @@ void *mm_realloc(void *ptr, size_t size)
 			total_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
 		}
 		
-		if(total_size >= size)
+		
+		if(total_size >= size) /* 이용 가능한 크기가 원래 size보다 커졌다면*/
 		{
-			printf("-> 1");
-			if(!prev_alloc && next_alloc)
+			if(!prev_alloc && next_alloc) /* 앞칸이 free이고 뒷칸은 not free인 경우 */
 			{
-				printf("-> 1");
+
+				/* 원래 구현은 줄일 사이즈만큼을 따로 배정하고 뒷 부분은 free로 만들 계획이었으나 에러가 나서 포기했습니다*/
 			/*	if(total_size - size >= 2 * DSIZE)
 				{
 					printf("->1\n");
@@ -279,24 +301,23 @@ void *mm_realloc(void *ptr, size_t size)
 					PUT(FTRP(ptr), PACK(total_size - size, 0));
 					insert_free(ptr);
 					return new_ptr;
-				}
-				else
-				{*/
-					printf("->2\n");
+
+					
+					/*앞 부분을 합친 형태로 반환해준다.*/
 					new_ptr = PREV_BLKP(ptr);
 					delete_free(PREV_BLKP(ptr));
 					 
-					memmove(new_ptr, ptr, size - 2*WSIZE);
+					memcpy(new_ptr, ptr, size - 2*WSIZE);
 					PUT(HDRP(new_ptr), PACK(total_size, 1));
 					PUT(FTRP(new_ptr), PACK(total_size, 1));
 					return new_ptr;
-			//	}
+
 				
 						
 			}
 			else if(prev_alloc && !next_alloc)
 			{
-				printf("-> 2");
+				/*  마찬가지로 앞부분에 할당하고 뒷부분은 free로 지정해주려 했는데 error나서 포기했습니다*/
 			/*	if(total_size - size >= 2 * DSIZE)
 				{
 					printf("-> 1\n");
@@ -313,7 +334,8 @@ void *mm_realloc(void *ptr, size_t size)
 				}
 				else
 				{*/
-					printf("-> 2\n");
+
+					/* 뒷부분을 합친다*/
 					delete_free(NEXT_BLKP(ptr));
 
 					PUT(HDRP(ptr), PACK(total_size, 1));
@@ -323,8 +345,8 @@ void *mm_realloc(void *ptr, size_t size)
 			}
 			else if(!prev_alloc && !next_alloc)
 			{
-	/*			printf("-> 3");
-				if(total_size - size >= 2 * DSIZE)
+				/*앞부분 할당 후 뒷부분 free할려 했으나 에러나서 포기함*/
+			/*	if(total_size - size >= 2 * DSIZE)
 				{
 					printf("-> 1\n");
 					new_ptr = PREV_BLKP(ptr);
@@ -343,11 +365,12 @@ void *mm_realloc(void *ptr, size_t size)
 				}
 				else
 				{*/
-					printf("-> 2\n");
+
+					/* 합친 것을 반환하는 것*/
 					new_ptr = PREV_BLKP(ptr);
 					delete_free(PREV_BLKP(ptr));
 					delete_free(NEXT_BLKP(ptr));
-					memmove(new_ptr, ptr, size - 2 * WSIZE);
+					memcpy(new_ptr, ptr, size - 2 * WSIZE);
 					
 					PUT(HDRP(new_ptr), PACK(total_size, 1));
 					PUT(FTRP(new_ptr), PACK(total_size, 1));
@@ -358,7 +381,7 @@ void *mm_realloc(void *ptr, size_t size)
 		}
 		else
 		{
-			printf("-> 2\n");
+			/*앞과 뒷부분을 고려해서 크기를 잡아도 realloc할 사이즈보다 작다면 그냥 free list를 돌면서 할당할 곳을 찾는다*/
 			new_ptr = mm_malloc(size);
 			place(new_ptr, size);
 			memcpy(new_ptr, ptr, size - 2 * WSIZE);
@@ -399,9 +422,8 @@ void mm_checkheap(int verbose)
 /* The remaining routines are internal helper routines */
 
 /* 
- * extend_heap - Extend heap with free block and return its block pointer
+ * extend_heap - 힙영역을 늘려주는 함수
  */
-/* $begin mmextendheap */
 static void *extend_heap(size_t words) 
 {
     char *bp;
@@ -418,23 +440,21 @@ static void *extend_heap(size_t words)
     /* header와 footer만 만들고 next와 prev는 colaesce단계에서 다루기로 한다 */
     PUT(HDRP(bp), PACK(size, 0));         /* 헤더 만들기 */
 	PUT(FTRP(bp), PACK(size, 0));	      /* 푸터 만들기 */
-    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* new epilogue header */
+    PUT(HDRP(NEXT_BLKP(bp)), PACK(0, 1)); /* 새로운 에필로그 헤더만들기 */
 
-    /* Coalesce if the previous block was free */
+    /* 합치기 과정으로 넘어간다 */
     return coalesce(bp);
 }
 
 
 /* 
- * place - Place block of asize bytes at start of free block bp 
- *         and split if remainder would be at least minimum block size
+ * place - 일정한 크기만큼 넣은 다음에 만약 분할 할 수 있는 상태라면 분할해준다.
  */
 static void place(void *bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));   
 	
-	//어차피 빈 할당된 것이 되면은 next와 prev는 쓰지않으니 총 (2 * DSIZE)보다 같거나 크면 나머지 공간을 이용할 수 있다.
-    if ((csize - asize) >= (DSIZE + OVERHEAD)) { 
+    if ((csize - asize) >= (DSIZE + OVERHEAD)) { /* 만약 넣고 나서도 공간이 남으면 free로 지정해준다*/
 		PUT(HDRP(bp), PACK(asize, 1));
 		PUT(FTRP(bp), PACK(asize, 1));
 		delete_free(bp);
@@ -443,8 +463,7 @@ static void place(void *bp, size_t asize)
 		PUT(FTRP(bp), PACK(csize-asize, 0));
 		insert_free(bp);	   
      }
-    else { 
-		//만약 모두 할당 되었다면 free_list에서 지워준다.
+    else { /*free로 지정할 공간이 충분히 남아있지않으면 그냥 전부를 할당해준다.*/
 		PUT(HDRP(bp), PACK(csize, 1));
 		PUT(FTRP(bp), PACK(csize, 1));
 		delete_free(bp);
@@ -455,7 +474,7 @@ static void place(void *bp, size_t asize)
 
 /*
  * coalesce - boundary tag를 이용하여 4가지 케이스로 지운다.
- *			- LIFO방식을 이용했기 때문에 더 간단하다.
+
  */
 static void *coalesce(void *bp)
 {
@@ -527,7 +546,7 @@ static void checkblock(void *bp)
 
 static void insert_free(char* ptr)
 {
-	//가장 마지막에 이중 연결 리스트 방식으로 연결해준다.
+	//가장 마지막에 LIFO 방식으로 연결해준다.
 	GET_NEXT(ptr) = _free_listp;
 	GET_PREV(ptr) = NULL;
 	GET_PREV(_free_listp) = ptr;
