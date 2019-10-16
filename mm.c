@@ -59,7 +59,7 @@
 /* $end mallocmacros */
 
 /* Global variables */
-static char *_heap_listp;  /* pointer to first block */  
+static char *_heap_listp = 0;  /* pointer to first block */  
 
 
 
@@ -69,11 +69,11 @@ static char *_heap_listp;  /* pointer to first block */
 #define GET_PREV(bp)  (*(char**)(bp + WSIZE))
 
 /* free list들 중 주소가 가장 높은 것을 지정한다.*/
-char *_free_listp = NULL;
+static char *_free_listp = NULL;
 
-void insert_free(char* ptr);
+static void insert_free(char* ptr);
 
-void delete_free(char* ptr);
+static void delete_free(char* ptr);
 
 /* 내가 정의 한 것 끝*/
 
@@ -108,14 +108,13 @@ int mm_init(void)
 	{
 		return -1;
 	}
-    PUT(get_heap_listp(), 0);                        /* alignment padding */
-    PUT(get_heap_listp() + WSIZE, PACK(DSIZE, 1));  /* prologue header */
-	PUT(get_heap_listp() + WSIZE * 2, 0); //next
-    PUT(get_heap_listp() + WSIZE * 3, 0); //prev
-	PUT(get_heap_listp() + WSIZE * 5, PACK(0, 1));   /* epilogue header */
+   	PUT(get_heap_listp(), 0);                        /* alignment padding */
+   	PUT(get_heap_listp() + WSIZE, PACK(DSIZE, 1));  /* prologue header */
+	PUT(get_heap_listp() + WSIZE * 2, PACK(DSIZE, 1)); //next
+	PUT(get_heap_listp() + WSIZE * 3, PACK(0, 1));   /* epilogue header */
 	set_and_get_heap_listp(get_heap_listp() + 2 * WSIZE);
 
-
+	_free_listp = get_heap_listp();
 	
     /* Extend the empty heap with a free block of CHUNKSIZE bytes */
 	if (extend_heap(CHUNKSIZE / WSIZE) == NULL)
@@ -145,7 +144,7 @@ void *mm_malloc(size_t size)
     /* Adjust block size to include overhead and alignment reqs. */
   	if (size <= DSIZE)
 	{
-		alloc_size = DSIZE + DSIZE + OVERHEAD;
+		alloc_size = DSIZE + OVERHEAD;
 	}
    	else
 	{
@@ -166,7 +165,6 @@ void *mm_malloc(size_t size)
 	 }
     place(bp, alloc_size);
 
-	
     return bp;
 } 
 /* $end mmmalloc */
@@ -175,9 +173,9 @@ void *mm_malloc(size_t size)
 static void *find_fit(size_t asize)
 {
 	char* ptr;
-	for (ptr = _free_listp; ptr != NULL; ptr = GET_NEXT(ptr))
+	for (ptr = _free_listp; GET_ALLOC(HDRP(ptr)) == 0; ptr = GET_NEXT(ptr))
 	{
-		if (GET_SIZE(HDRP(ptr)) <= asize)
+		if (GET_SIZE(HDRP(ptr)) >= asize)
 		{
 			return ptr;
 		}
@@ -191,7 +189,10 @@ static void *find_fit(size_t asize)
 /* $begin mmfree */
 void mm_free(void *bp)
 {
-	//TODO
+	size_t size = GET_SIZE(HDRP(bp));
+	PUT(HDRP(bp), PACK(size, 0));
+	PUT(FTRP(bp), PACK(size, 0));
+	coalesce(bp);
 }
 
 /* $end mmfree */
@@ -201,8 +202,77 @@ void mm_free(void *bp)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-	//TODO 
-	return NULL;
+	size_t oldsize,newsize;
+	void *newptr;
+
+	//If size is negative it means nothing, just return NULL
+	if((int)size < 0) 
+    	return NULL;
+
+	/* If size == 0 then this is just free, and we return NULL. */
+	if (size == 0) {
+		mm_free(ptr);
+		return (NULL);
+	}
+
+	/* If oldptr is NULL, then this is just malloc. */
+	if (ptr == NULL)
+		return (mm_malloc(size));
+
+	oldsize=GET_SIZE(HDRP(ptr));
+	newsize = size + (2 * WSIZE);					// newsize after adding header and footer to asked size
+
+	/* Copy the old data. */
+
+	//If the size needs to be decreased, shrink the block and return the same pointer
+	if (newsize <= oldsize){
+		
+	   /*
+		* AS MENTIONED IN THE PROJECT HANDOUT THE CODE SNIPPET BELOW SHRINKS THE OLD ALLOCATED BLOCK
+		* SIZE TO THE REQUESTED NEW SIZE BY REMOVING EXTRA DATA i.e. (oldsize-newsize) AMOUNT OF DATA.
+		* ON RUNNING CODE WITH THIS SNIPPET, THE FOLLOWING ERROR OCCURS 'mm_realloc did not preserve 
+		* the data from old block' WHICH WILL ALWAYS HAPPEN IF WE SHRINK THE BLOCK.
+		*/
+
+		/*if(oldsize-newsize<=2*DSIZE){
+			return ptr;
+		}
+		PUT(HDRP(ptr),PACK(newsize,1));
+		PUT(FTRP(ptr),PACK(newsize,1));
+		PUT(HDRP(NEXT_BLKP(ptr)),PACK(oldsize-newsize,1));
+		PUT(FTRP((NEXT_BLKP(ptr)),PACK(oldsize-newsize,1));
+		mm_free(NEXT_BLKP(ptr));
+		free_list_add(NEXT_BLKP(ptr));*/
+		
+		return ptr;
+	}
+	else{
+		size_t if_next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));		//check if next block is allocated
+		size_t next_blk_size = GET_SIZE(HDRP(NEXT_BLKP(ptr)));		//size of next block
+		size_t total_free_size = oldsize + next_blk_size;			//total free size of current and next block
+
+		//combining current and next block if total_free_size is greater then or equal to new size
+		if(!if_next_alloc && total_free_size>= newsize){
+			delete_free(NEXT_BLKP(ptr));	
+			PUT(HDRP(ptr),PACK(total_free_size,1));
+			PUT(FTRP(ptr),PACK(total_free_size,1));
+			return ptr;
+		}
+		//finding new size elsewhere in free_list and copy old data to new place
+		else{
+			newptr=mm_malloc(newsize);
+			
+			/* If realloc() fails the original block is left untouched  */
+			if (newptr == NULL)
+				return (NULL);
+
+			place(newptr,newsize);
+			memcpy(newptr,ptr,oldsize);
+			mm_free(ptr);
+			return newptr;
+		}
+	}
+
 }
 
 /* 
@@ -210,7 +280,7 @@ void *mm_realloc(void *ptr, size_t size)
  */
 void mm_checkheap(int verbose) 
 {
-    char *bp = get_heap_listp();
+    char *bp = _free_listp;
 	
     if (verbose)
 	printf("Heap (%p):\n", get_heap_listp());
@@ -267,7 +337,6 @@ static void *extend_heap(size_t words)
 static void place(void *bp, size_t asize)
 {
     size_t csize = GET_SIZE(HDRP(bp));   
-	char* prev, next;
 	
 	//어차피 빈 할당된 것이 되면은 next와 prev는 쓰지않으니 총 (2 * DSIZE)보다 같거나 크면 나머지 공간을 이용할 수 있다.
     if ((csize - asize) >= (DSIZE + OVERHEAD)) { 
@@ -277,8 +346,8 @@ static void place(void *bp, size_t asize)
 		bp = NEXT_BLKP(bp);
 		PUT(HDRP(bp), PACK(csize-asize, 0));
 		PUT(FTRP(bp), PACK(csize-asize, 0));
-		insert_free(bp);
-    }
+		insert_free(bp);	   
+     }
     else { 
 		//만약 모두 할당 되었다면 free_list에서 지워준다.
 		PUT(HDRP(bp), PACK(csize, 1));
@@ -298,41 +367,40 @@ static void *coalesce(void *bp)
 	/*앞 자리와 뒷자리 검사*/
 
 	//bp에서 앞자리로 이동해도 주소 변화가 없는 것은 맨 앞자리이기 때문이다.
-	int prev_alloc = (GET_ALLOC(FTRP(PREV_BLKP(bp))) | PREV_BLKP(bp) == bp);
+	int prev = (GET_ALLOC(FTRP(PREV_BLKP(bp)))) | (PREV_BLKP(bp) == bp);
     //에필로그 헤더가 있으니 맨 끝 상황에서도 잘 작동한다.
-	int next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
-
-    if (prev_alloc && next_alloc) {          /* Case 1 : 앞자리와 뒷자리 모두 할당된 상태 일 때*/
-		delete_free(bp);
+	int next = GET_ALLOC(HDRP(NEXT_BLKP(bp)));
+	size_t size = GET_SIZE(HDRP(bp));
+    if (prev && next) {          /* Case 1 : 앞자리와 뒷자리 모두 할당된 상태 일 때*/
+		insert_free(bp);
 		return bp;
     }
-    else if (prev_alloc && !next_alloc) {      /* Case 2 : 앞자리는 할당, 뒷자리는 할당되지 않은 상태 일 때 */
+    else if (prev && !next) {      /* Case 2 : 앞자리는 할당, 뒷자리는 할당되지 않은 상태 일 때 */
 		size += GET_SIZE(HDRP(NEXT_BLKP(bp)));
 		delete_free(NEXT_BLKP(bp));
 		PUT(HDRP(bp), PACK(size, 0));
 		PUT(FTRP(bp), PACK(size,0));
 		//어차피 next, prev는 그대로 유지되니 놔둔다.
     }
-    else if (!prev_alloc && next_alloc) {      /* Case 3 : 앞자리는 할당 되지않고, 뒷자리는 할당 되었을 때*/
+    else if (!prev && next) {      /* Case 3 : 앞자리는 할당 되지않고, 뒷자리는 할당 되었을 때*/
 		size += GET_SIZE(HDRP(PREV_BLKP(bp)));
-		delete_free(bp);
+		delete_free(PREV_BLKP(bp));
 		PUT(FTRP(bp), PACK(size, 0));
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 		bp = PREV_BLKP(bp);
     }
     else {                                     /* Case 4 : 앞자리와 뒷자리 모두 할당 되지 않았을 때*/
 		size += GET_SIZE(HDRP(PREV_BLKP(bp))) + GET_SIZE(FTRP(NEXT_BLKP(bp)));
+		delete_free(PREV_BLKP(bp));
 		delete_free(NEXT_BLKP(bp));
-		delete_free(bp);
 		PUT(HDRP(PREV_BLKP(bp)), PACK(size, 0));
 		PUT(FTRP(NEXT_BLKP(bp)), PACK(size, 0));
 		bp = PREV_BLKP(bp);
     }
-	
+    insert_free(bp);
 
     return bp;
 }
-
 
 static void printblock(void *bp) 
 {
@@ -362,16 +430,8 @@ static void checkblock(void *bp)
 }
 
 
-void insert_free(char* ptr)
+static void insert_free(char* ptr)
 {
-	//삽입이 처음이면은 초기화시켜준다
-	if (_free_listp == NULL)
-	{
-		_free_listp = ptr;
-		GET_PREV(ptr) = NULL;
-		GET_NEXT(ptr) = NULL;
-		return;
-	}
 	//가장 마지막에 이중 연결 리스트 방식으로 연결해준다.
 	GET_NEXT(ptr) = _free_listp;
 	GET_PREV(ptr) = NULL;
@@ -380,14 +440,14 @@ void insert_free(char* ptr)
 	_free_listp = ptr;
 }
 
-void delete_free(char* ptr)
+static void delete_free(char* ptr)
 {
 
 	//맨 마지막이면 앞의 노드와의 연결을 끊는다.
 	if (GET_PREV(ptr) == NULL)
 	{
 		_free_listp = GET_NEXT(ptr);
-		GET_PREV(GET_NEXT(ptr)) = NULL;
+		GET_PREV(GET_NEXT(ptr)) = GET_PREV(ptr);
 	}
 	else//중간이면 뒤의 노드와 앞의 노드를 연결시켜준다.
 	{
