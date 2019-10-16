@@ -202,77 +202,172 @@ void mm_free(void *bp)
  */
 void *mm_realloc(void *ptr, size_t size)
 {
-	size_t oldsize,newsize;
-	void *newptr;
-
-	//If size is negative it means nothing, just return NULL
-	if((int)size < 0) 
-    	return NULL;
-
-	/* If size == 0 then this is just free, and we return NULL. */
-	if (size == 0) {
-		mm_free(ptr);
-		return (NULL);
+	size_t original_size;
+	void* new_ptr;
+	size += 2 * WSIZE;
+	
+	if(ptr == NULL)
+	{
+		return  mm_malloc(size);
 	}
-
-	/* If oldptr is NULL, then this is just malloc. */
-	if (ptr == NULL)
-		return (mm_malloc(size));
-
-	oldsize=GET_SIZE(HDRP(ptr));
-	newsize = size + (2 * WSIZE);					// newsize after adding header and footer to asked size
-
-	/* Copy the old data. */
-
-	//If the size needs to be decreased, shrink the block and return the same pointer
-	if (newsize <= oldsize){
-		
-	   /*
-		* AS MENTIONED IN THE PROJECT HANDOUT THE CODE SNIPPET BELOW SHRINKS THE OLD ALLOCATED BLOCK
-		* SIZE TO THE REQUESTED NEW SIZE BY REMOVING EXTRA DATA i.e. (oldsize-newsize) AMOUNT OF DATA.
-		* ON RUNNING CODE WITH THIS SNIPPET, THE FOLLOWING ERROR OCCURS 'mm_realloc did not preserve 
-		* the data from old block' WHICH WILL ALWAYS HAPPEN IF WE SHRINK THE BLOCK.
-		*/
-
-		/*if(oldsize-newsize<=2*DSIZE){
-			return ptr;
-		}
-		PUT(HDRP(ptr),PACK(newsize,1));
-		PUT(FTRP(ptr),PACK(newsize,1));
-		PUT(HDRP(NEXT_BLKP(ptr)),PACK(oldsize-newsize,1));
-		PUT(FTRP((NEXT_BLKP(ptr)),PACK(oldsize-newsize,1));
-		mm_free(NEXT_BLKP(ptr));
-		free_list_add(NEXT_BLKP(ptr));*/
-		
+	
+	if(size == 0)
+	{
+		mm_free(ptr);
+		return NULL;
+	}
+	
+	original_size = GET_SIZE(HDRP(ptr));
+	
+	if(original_size == size)
+	{
+		printf("1\n");
 		return ptr;
 	}
-	else{
-		size_t if_next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));		//check if next block is allocated
-		size_t next_blk_size = GET_SIZE(HDRP(NEXT_BLKP(ptr)));		//size of next block
-		size_t total_free_size = oldsize + next_blk_size;			//total free size of current and next block
+	else if(original_size > size)
+	{
+		printf("2");
+	/*	if(original_size - size >= 2 * DSIZE)
+		{
+			printf("-> 1\n");
+			PUT(HDRP(ptr), PACK(size, 1));
+			PUT(FTRP(ptr), PACK(size, 1));
+			ptr = NEXT_BLKP(ptr);
+			PUT(HDRP(ptr), PACK(original_size - size, 0));	
+			PUT(HDRP(ptr), PACK(original_size - size, 0));
+			
+			insert_free(ptr);
+			return PREV_BLKP(ptr);
+		}
+		else
+		{*/
+			printf("-> 2\n");
+			return ptr;
+	//	}
+	}
+	else if(original_size < size)
+	{	printf("3");
+		_Bool prev_alloc = GET_ALLOC(FTRP(PREV_BLKP(ptr))) || ptr == PREV_BLKP(ptr);
+		_Bool next_alloc = GET_ALLOC(HDRP(NEXT_BLKP(ptr)));
+		size_t total_size = original_size;
+		if(!prev_alloc)
+		{	
+			total_size += GET_SIZE(FTRP(PREV_BLKP(ptr)));
+		}
+		if(!next_alloc)
+		{
+			total_size += GET_SIZE(HDRP(NEXT_BLKP(ptr)));
+		}
+		
+		if(total_size >= size)
+		{
+			printf("-> 1");
+			if(!prev_alloc && next_alloc)
+			{
+				printf("-> 1");
+			/*	if(total_size - size >= 2 * DSIZE)
+				{
+					printf("->1\n");
+					new_ptr = PREV_BLKP(ptr);
+					delete_free(PREV_BLKP(ptr));
+					memmove(new_ptr, ptr, size - 2 *WSIZE);					
 
-		//combining current and next block if total_free_size is greater then or equal to new size
-		if(!if_next_alloc && total_free_size>= newsize){
-			delete_free(NEXT_BLKP(ptr));	
-			PUT(HDRP(ptr),PACK(total_free_size,1));
-			PUT(FTRP(ptr),PACK(total_free_size,1));
+					PUT(HDRP(new_ptr), PACK(size, 1));
+					PUT(FTRP(new_ptr), PACK(size, 1));
+					ptr = NEXT_BLKP(new_ptr);
+					PUT(HDRP(ptr), PACK(total_size - size, 0));
+					PUT(FTRP(ptr), PACK(total_size - size, 0));
+					insert_free(ptr);
+					return new_ptr;
+				}
+				else
+				{*/
+					printf("->2\n");
+					new_ptr = PREV_BLKP(ptr);
+					delete_free(PREV_BLKP(ptr));
+					 
+					memmove(new_ptr, ptr, size - 2*WSIZE);
+					PUT(HDRP(new_ptr), PACK(total_size, 1));
+					PUT(FTRP(new_ptr), PACK(total_size, 1));
+					return new_ptr;
+			//	}
+				
+						
+			}
+			else if(prev_alloc && !next_alloc)
+			{
+				printf("-> 2");
+			/*	if(total_size - size >= 2 * DSIZE)
+				{
+					printf("-> 1\n");
+					delete_free(NEXT_BLKP(ptr));
+	
+					PUT(HDRP(ptr), PACK(size, 1));
+					PUT(FTRP(ptr), PACK(size, 1));
+					ptr = NEXT_BLKP(ptr);
+					PUT(HDRP(ptr), PACK(total_size - size, 0));
+					PUT(FTRP(ptr), PACK(total_size - size, 0));
+					insert_free(ptr);
+					
+					return PREV_BLKP(ptr);
+				}
+				else
+				{*/
+					printf("-> 2\n");
+					delete_free(NEXT_BLKP(ptr));
+
+					PUT(HDRP(ptr), PACK(total_size, 1));
+					PUT(FTRP(ptr), PACK(total_size, 1));
+					return ptr;
+			//	}
+			}
+			else if(!prev_alloc && !next_alloc)
+			{
+	/*			printf("-> 3");
+				if(total_size - size >= 2 * DSIZE)
+				{
+					printf("-> 1\n");
+					new_ptr = PREV_BLKP(ptr);
+					delete_free(NEXT_BLKP(ptr));
+					delete_free(PREV_BLKP(ptr));
+					memmove(new_ptr, ptr, size - 2*WSIZE);
+					
+					PUT(HDRP(new_ptr), PACK(size, 1));
+					PUT(FTRP(new_ptr), PACK(size, 1));
+					ptr = NEXT_BLKP(new_ptr);
+					PUT(HDRP(ptr), PACK(total_size - size, 1));
+					PUT(FTRP(ptr), PACK(total_size - size, 1));
+					insert_free(ptr);
+					
+					return new_ptr;
+				}
+				else
+				{*/
+					printf("-> 2\n");
+					new_ptr = PREV_BLKP(ptr);
+					delete_free(PREV_BLKP(ptr));
+					delete_free(NEXT_BLKP(ptr));
+					memmove(new_ptr, ptr, size - 2 * WSIZE);
+					
+					PUT(HDRP(new_ptr), PACK(total_size, 1));
+					PUT(FTRP(new_ptr), PACK(total_size, 1));
+					return new_ptr;
+				//}
+			}
 			return ptr;
 		}
-		//finding new size elsewhere in free_list and copy old data to new place
-		else{
-			newptr=mm_malloc(newsize);
-			
-			/* If realloc() fails the original block is left untouched  */
-			if (newptr == NULL)
-				return (NULL);
-
-			place(newptr,newsize);
-			memcpy(newptr,ptr,oldsize);
+		else
+		{
+			printf("-> 2\n");
+			new_ptr = mm_malloc(size);
+			place(new_ptr, size);
+			memcpy(new_ptr, ptr, size - 2 * WSIZE);
 			mm_free(ptr);
-			return newptr;
+			return new_ptr;
 		}
 	}
 
+	return NULL;	
 }
 
 /* 
