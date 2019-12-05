@@ -11,7 +11,6 @@
 #include <stdbool.h>
 #include <time.h>
 #include <pthread.h>
-#include <windows.h>
 
 /*
 1. pagenum는 (page의 갯수 -1)이다.

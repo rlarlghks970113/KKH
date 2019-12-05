@@ -79,6 +79,8 @@ int db_update(int table_id, int64_t key, char* values, int trx_id)
 		buffer_unpinned(cache);
 		pthread_mutex_unlock(&cache->buf_sys_mutex);
 
+
+
 		abort_trx(trx_id);
 		end_trx(trx_id);
 		//FAIL....
@@ -88,8 +90,6 @@ int db_update(int table_id, int64_t key, char* values, int trx_id)
 	{
 		buffer_unpinned(cache);
 		pthread_mutex_unlock(&cache->buf_sys_mutex);
-
-		pthread_cond_wait(&trx_manager.trx_table[trx_id].wait_lock->trx->trx_cond, &trx_manager.trx_table[trx_id].wait_lock->trx->trx_mutex);
 
 
 		//after waken;
@@ -164,8 +164,9 @@ int begin_trx()
 
 	//trx_structure을 할당
 	trx_manager.trx_table[trx_id].trx_id = trx_id;
-	trx_manager.trx_table[trx_id].trx_cond = PTHREAD_COND_INITIALIZER;
-	trx_manager.trx_table[trx_id].trx_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_cond_init(&trx_manager.trx_table[trx_id].trx_cond, NULL);
+	pthread_mutex_init(&trx_manager.trx_table[trx_id].trx_mutex, NULL);
+
 	trx_manager.trx_table[trx_id].trx_locks = NULL;
 	trx_manager.trx_table[trx_id].undo_log_list = NULL;
 	trx_manager.trx_table[trx_id].wait_lock = NULL;
@@ -183,7 +184,13 @@ int end_trx(int trx_id)
 	if (trx_manager.trx_table[trx_id].state == IDLE) return -1;
 
 
+	pthread_mutex_lock(&lock_manager.lock_sys_mutex);
+
 	pthread_cond_broadcast(&trx_manager.trx_table[trx_id].trx_cond);
+
+	pthread_mutex_unlock(&lock_manager.lock_sys_mutex);
+
+
 
 
 
@@ -262,7 +269,6 @@ int end_trx(int trx_id)
 
 	pthread_mutex_unlock(&trx_manager.trx_sys_mutex);
 
-	fflush(stdout);
 
 	return trx_id;
 }
@@ -333,8 +339,6 @@ int acquire_record_lock(int table_id, pagenum_t page_id, int64_t key, int trx_id
 {
 
 	pthread_mutex_lock(&lock_manager.lock_sys_mutex);
-
-
 	//trx를 돌면서 해당 lock이 잡혀있는지 확인
 	lock_t* tmp_lock = trx_manager.trx_table[trx_id].trx_locks;
 	while (tmp_lock != NULL)
@@ -511,7 +515,26 @@ int acquire_record_lock(int table_id, pagenum_t page_id, int64_t key, int trx_id
 									//check_lock의 cond를 잡는다
 									last_lock->trx->wait_lock = check_lock;
 
+
+
+									int wait_trx_id = trx_manager.trx_table[trx_id].wait_lock->trx->trx_id;
+
+									buffer* cache = NULL;
+									cache = buffer_read_page(table_id, page_id, cache);
+
+									pthread_mutex_unlock(&cache->buf_sys_mutex);
+
+									buffer_unpinned(cache);
+
 									pthread_mutex_unlock(&lock_manager.lock_sys_mutex);
+
+
+									pthread_cond_wait(&trx_manager.trx_table[wait_trx_id].trx_cond, &trx_manager.trx_table[wait_trx_id].trx_mutex);
+									pthread_mutex_unlock(&trx_manager.trx_table[wait_trx_id].trx_mutex);
+
+
+
+
 
 									return CONFLICT;
 								}
@@ -565,7 +588,22 @@ int acquire_record_lock(int table_id, pagenum_t page_id, int64_t key, int trx_id
 									//기다리는 lock을 설정하고 conflict 반환
 									last_lock->trx->wait_lock = check_lock;
 
+									buffer* cache = NULL;
+									cache = buffer_read_page(table_id, page_id, cache);
+
+									pthread_mutex_unlock(&cache->buf_sys_mutex);
+
+									buffer_unpinned(cache);
+
+
+									int wait_trx_id = trx_manager.trx_table[trx_id].wait_lock->trx->trx_id;
+
+
 									pthread_mutex_unlock(&lock_manager.lock_sys_mutex);
+
+									pthread_cond_wait(&trx_manager.trx_table[wait_trx_id].trx_cond, &trx_manager.trx_table[wait_trx_id].trx_mutex);
+
+
 
 									return CONFLICT;
 								}

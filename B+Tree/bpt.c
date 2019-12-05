@@ -614,26 +614,28 @@ int db_find(int table_id, int64_t key, char* ret_val, int trx_id)
 						pthread_mutex_unlock(&buffer_pools.buf_pool_sys_mutex);
 
 						enum return_value rvalue = acquire_record_lock(table_id, cache->page_num, key, trx_id, SHARED, i);
-
-						if (rvalue == DEADLOCK)
+						
+						if (rvalue == CONFLICT)
 						{
 							buffer_unpinned(cache);
+
 							pthread_mutex_unlock(&cache->buf_sys_mutex);
+
+							//after waken;
+							return db_find(table_id, key, ret_val, trx_id);
+						}
+						else if (rvalue == DEADLOCK)
+					    {
+							buffer_unpinned(cache);
+							pthread_mutex_unlock(&cache->buf_sys_mutex);
+	
+
 
 							abort_trx(trx_id);
 							end_trx(trx_id);
 
 							//return fail
 							return -1;
-						}
-						else if (rvalue == CONFLICT)
-						{
-							pthread_mutex_unlock(&cache->buf_sys_mutex);
-
-							pthread_cond_wait(&trx_manager.trx_table[trx_id].wait_lock->trx->trx_cond, &trx_manager.trx_table[trx_id].wait_lock->trx->trx_mutex);
-
-							//after waken;
-							return db_find(table_id, key, ret_val, trx_id);
 						}
 
 						//record lock이 성공적으로 잡혔으면 find
@@ -1255,14 +1257,16 @@ int init_db(int num_buf)
 
 	buffer_pools.size = num_buf;
 	buffer_pools.selected = buffer_pools.buffer_pool;
-	buffer_pools.buf_pool_sys_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_init(&buffer_pools.buf_pool_sys_mutex, NULL);
 
-	trx_manager.trx_sys_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_init(&trx_manager.trx_sys_mutex, NULL);
+
 	trx_manager.next_trx_id = 0;
 
 
 
-	lock_manager.lock_sys_mutex = PTHREAD_MUTEX_INITIALIZER;
+	pthread_mutex_init(&lock_manager.lock_sys_mutex, NULL);
+
 
 	for (i = 0; i < buffer_pools.size; ++i)
 	{
@@ -1276,7 +1280,8 @@ int init_db(int num_buf)
 		buffer_pools.buffer_pool[i].next_buffer = i + 1;
 		buffer_pools.buffer_pool[i].is_pinned = 0;
 
-		buffer_pools.buffer_pool[i].buf_sys_mutex = PTHREAD_MUTEX_INITIALIZER;
+		pthread_mutex_init(&buffer_pools.buffer_pool[i].buf_sys_mutex, NULL);
+
 
 		if (i == buffer_pools.size - 1)
 		{
